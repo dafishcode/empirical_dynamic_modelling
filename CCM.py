@@ -3,6 +3,94 @@ import admin_functions_salk as adfn
 Fcode = '/nadata/mnlsc/home/dburrows/Documents/empirical_dynamic_modelling/'
 Fdata = '/nadata/mnlsc/home/dburrows/Documents/PTZ-WILDTYPE-CCM/'
 
+#===============================
+def linear_dimensionality(data):
+#===============================
+    """
+    This function calculate the dimensionality as a measure of the equal/unequal weighting across all eigenvalues.
+    
+    Inputs:
+        data (np array): covariance matrix
+        
+    
+    Returns:
+        dim (float): dimensionality
+    
+    """
+    import numpy as np
+    
+    v = np.linalg.eigh(data)[0]
+    dim = (np.sum(v)**2)/np.sum((v**2))
+    
+    return(dim)
+
+#===============================
+def par_save_name(name, par):
+#===============================
+
+    
+    """
+    This function saves name with a parameter, placing it before run.
+    """
+    
+    pref = name[:name.find('run')]
+    run = name[name.find('run'):name.find('run')+6]
+    return(pref + par + run)
+    
+    
+
+#=============================
+def list_series(length, num):
+#=============================
+    
+    """
+    This function creates a series of empty lists of the same dimension.
+    
+    
+    Inputs:
+        length (int): length of each empty list
+        num (int): number of lists
+        
+    returns:
+        out_l (list of list): list of list
+    
+    """
+    
+    out_l = [0]*num
+
+    for x,n in enumerate(range(num)):
+        out_l[x] = [0]*length
+    return(out_l)
+
+
+
+#=============================
+def h5_2dict(data):
+#=============================
+    """
+    This function converts h5 files into a dictionary by looping through all keys. 
+    
+    
+    Inputs:
+        data (h5): h5 file
+        
+    returns:
+        d (dict): dictionary
+    
+    """
+    
+    import h5py
+    import numpy as np
+    h5read = h5py.File(data, 'r')
+    par_l = np.array(h5read)
+    d = {}
+    for i in par_l:
+        d.update({i: np.array(h5read[i])})
+        
+    return(d)
+
+
+
 #=================================
 def CCM_sort(co, tr, dff, name, mode):
 #=================================
@@ -54,7 +142,7 @@ def CCM_sort(co, tr, dff, name, mode):
             trace_list = ['trace', 'dff']
             #loop through each trace type
             for i in trace_list:
-                full_name = name + '_pre-CCM-' + i + '.h5'
+                full_name = name + '_' + i + '_pre-CCM.h5'
                 #concatenate with mean trace at the top for kEDM
                 array = np.vstack((f_dict['mean ' + i], f_dict[i])).T
                 np2h5(full_name, array)
@@ -67,7 +155,8 @@ def CCM_sort(co, tr, dff, name, mode):
                 num = 9828
                 
                 #PUT INTO DICT
-                f_dict = { 'coord': sub_co, 'BLN mean trace' : mean_tr[:num], 'BLN trace': sub_tr[:,:num], 'BLN mean dff' : mean_dff[:num], 'BLN dff' : sub_dff[:,:num],
+                f_dict = { 'coord': sub_co,
+'BLN mean trace' : mean_tr[:num], 'BLN trace': sub_tr[:,:num], 'BLN mean dff' : mean_dff[:num], 'BLN dff' : sub_dff[:,:num],
                          'PTZ05 mean trace' : mean_tr[num:2*num], 'PTZ05 trace': sub_tr[:,num:2*num], 'PTZ05 mean dff' : mean_dff[num:2*num], 'PTZ05 dff' : sub_dff[:,num:2*num],
                          
                          'PTZ20 mean trace' : mean_tr[2*num:], 'PTZ20 trace': sub_tr[:,2*num:], 'PTZ20 mean dff' : mean_dff[2*num:], 'PTZ20 dff' : sub_dff[:,2*num:]}
@@ -79,7 +168,7 @@ def CCM_sort(co, tr, dff, name, mode):
                 #loop through each trace type
                 for i in trace_list:
                     for e in cond_list:
-                        full_name = name + '_pre-CCM-' + e + '-' + i + '.h5'
+                        full_name = name[0:-6] + e + "_" + name[-6:] + '_' + i + '_pre-CCM.h5'
                         #concatenate with mean trace at the top for kEDM
                         array = np.vstack((f_dict[e + ' mean ' + i], f_dict[e + ' ' + i])).T
                         np2h5(full_name, array)
@@ -101,8 +190,36 @@ def CCM_sort(co, tr, dff, name, mode):
 
 
 
+#=====================================
+def kspace_meantrace(coord, trace, k):
+#=====================================
+    """
+    This function performs kmeans on spatial coordinates and averages cell traces. 
+    
+    Inputs:
+        coord (np array): X x Y x Z coordinates
+        trace (np array): signal x time
+        k (int): k clusters
+    
+    Returns:
+        k_coord (np array): space x dimension for clustered cells
+        k_trace (np array): signal x time for clustered cells
 
+    """
 
+    from scipy.cluster.vq import kmeans2
+    import numpy as np
+    
+    k_coord, k_lab = kmeans2(coord, k) #Perform k means
+    k_coord = k_coord[np.unique(k_lab)] #remove empty clusters
+
+    k_trace = np.zeros((len(np.unique(k_lab)),trace.shape[1]))  
+    for x,n in enumerate(np.unique(k_lab)): #loop through all clusters
+        sub_trace = trace[k_lab == n] #Find traces of clustered coords 
+        k_trace[x] = np.apply_along_axis(np.mean, 0, sub_trace)
+    
+    return(k_coord, k_trace)
+    
 
 
 

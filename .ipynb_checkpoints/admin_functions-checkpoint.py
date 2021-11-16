@@ -216,6 +216,44 @@ def load_list(inp_list):
 #=============================
 #==============================
 
+#================================================
+def select_region(trace, coord, region):
+#================================================
+    
+    """
+    This function slices data to include only those within a specific brain region.
+
+    Inputs:
+        trace (np array): cells x timepoints, raw or normalised fluorescence values
+        coord (np array): cells x XYZ coordinates and labels
+        region (str): 'all', 'Diencephalon', 'Midbrain', 'Hindbrain' or 'Telencephalon'
+    
+    Returns:
+        sub_trace (np array): cells x timepoints, raw or normalised fluorescence values for subregion
+        sub_coord (np array): cells x XYZ coordinates for subregion
+    
+    """
+    
+    import numpy as np
+
+    if coord.shape[0] != trace.shape[0]:
+        print('Trace and coordinate data not same shape')
+        return()
+
+
+    if region == 'all':
+        locs = np.where(coord[:,4] != 'nan')
+
+    else: 
+        locs = np.where(coord[:,4] == region)
+
+    sub_coord = coord[locs]
+
+    sub_trace = trace[locs]
+
+
+    return(sub_trace,sub_coord)
+
 #============================================
 def save_shared_files(path, son_path, mode):
 #============================================
@@ -250,7 +288,7 @@ def save_shared_files(path, son_path, mode):
 
 
     if mode == 'criticality':
-        file_list = [return_files(path , son_path, 'criticality.py')[0], return_files(path , son_path, 'IS.py')[0]]  #search for admin file in current directory
+        file_list = [return_files(path , son_path, 'criticality.py')[0], return_files(path , son_path, 'IS.py')[0], return_files(path, son_path, 'trace_analyse.py')[0]]  #search for admin file in current directory
         path_list = ['criticality', 'avalanche_model', 'mutant_analysis'] #CHANGE AS NEEDED!
 
     if mode == 'lce':
