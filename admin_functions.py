@@ -216,6 +216,44 @@ def load_list(inp_list):
 #=============================
 #==============================
 
+#================================================
+def select_region(trace, coord, region):
+#================================================
+    
+    """
+    This function slices data to include only those within a specific brain region.
+
+    Inputs:
+        trace (np array): cells x timepoints, raw or normalised fluorescence values
+        coord (np array): cells x XYZ coordinates and labels
+        region (str): 'all', 'Diencephalon', 'Midbrain', 'Hindbrain' or 'Telencephalon'
+    
+    Returns:
+        sub_trace (np array): cells x timepoints, raw or normalised fluorescence values for subregion
+        sub_coord (np array): cells x XYZ coordinates for subregion
+    
+    """
+    
+    import numpy as np
+
+    if coord.shape[0] != trace.shape[0]:
+        print('Trace and coordinate data not same shape')
+        return()
+
+
+    if region == 'all':
+        locs = np.where(coord[:,4] != 'nan')
+
+    else: 
+        locs = np.where(coord[:,4] == region)
+
+    sub_coord = coord[locs]
+
+    sub_trace = trace[locs]
+
+
+    return(sub_trace,sub_coord)
+
 #============================================
 def save_shared_files(path, son_path, mode):
 #============================================
@@ -225,7 +263,7 @@ def save_shared_files(path, son_path, mode):
     Inputs:
     path (string): name of parent path
     son_path (string): name of code folder 
-    mode (string): define which file to save: 'admin' or 'criticality'
+    mode (string): define which file to save: 'admin', criticality' or 'lce'
     
     """
 
@@ -249,10 +287,15 @@ def save_shared_files(path, son_path, mode):
         path_list = os.listdir(path) #get names of all directories
 
 
-    elif mode == 'criticality':
-        file_list = [return_files(path , son_path, 'avalanches.py')[0], return_files(path , son_path, 'IS.py')[0]]  #search for admin file in current directory
-        path_list = ['criticality', 'spiking_network_criticality', 'zebrafish_mutant_analysis'] #CHANGE AS NEEDED!
+    if mode == 'criticality':
+        file_list = [return_files(path , son_path, 'criticality.py')[0], return_files(path , son_path, 'IS.py')[0], return_files(path, son_path, 'trace_analyse.py')[0]]  #search for admin file in current directory
+        path_list = ['criticality', 'avalanche_model', 'mutant_analysis'] #CHANGE AS NEEDED!
 
+    if mode == 'lce':
+        file_list = return_files(path , son_path, 'LCE.py' ) #search for LCE file in current directory
+        path_list = ['empirical_dynamic_modelling', 'seizure_dynamics'] #CHANGE AS NEEDED!
+        
+        
     loop_dir(file_list, path_list) 
 
 
@@ -511,7 +554,21 @@ def stats_2samp(data1, data2, alpha, n_comp, mode):
             
         print('t = ' + str(t) +  '   p = ' + str(p))
 
-
+#=======================================================================
+def mean_distribution(distlist): #Generate mean distribution 
+#=======================================================================
+    import numpy as np
+    comb_vec = []
+    for i in range(len(distlist)):
+        comb_vec = np.append(comb_vec, distlist[i])
+    av = np.unique(comb_vec, return_counts=True)[0]
+    freq = (np.unique(comb_vec, return_counts=True)[1]).astype(int)//len(distlist)
+    mean_vec = []
+    for e in range(freq.shape[0]):
+        mean_vec = np.append(mean_vec, np.full(freq[e],av[e]))
+    return(mean_vec)
+        
+        
 #PLOT
 #=============================
 #=============================
@@ -536,7 +593,7 @@ def multi_plot(data_list, col_list, plot_type, size, rows, cols):
     plt.figure(figsize = size)
     
     for i in range(len(data_list)):
-        plt.subplot(rows, cols, i + 1, projection = '3d')
+        plt.subplot(rows, cols, i + 1)
         plot = getattr(plt, plot_type)(data_list[i], color = col_list[i]) 
     plt.show()
         
