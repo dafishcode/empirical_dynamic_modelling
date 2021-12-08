@@ -117,7 +117,7 @@ def MI(data, delay, n_bins):
             Phk = len(short_data[data_bin[h] & delay_data_bin[k]]) / len(short_data)
 
             if Phk != 0 and P_bin[h] != 0 and P_bin[k] != 0:
-                MI += -Phk * math.log( Phk / (P_bin[h] * P_bin[k]))
+                MI += Phk * math.log( Phk / (P_bin[h] * P_bin[k]))
     return(MI)
 
 
@@ -162,26 +162,46 @@ def FNN(data,tau,m, thresh):
 
 
 #==============================================    
-def find_taum(data, thresh):
+def find_tau(data):
 #==============================================    
     """
-    This function finds the tau that maximises MI and m that approaches 0 false nearest neighbours.  
+    This function finds the tau that minimises the MI - provides most independent information to initial time series. 
     
     Inputs:
         data (np array): 1d vector timeseries
     
     Returns:
-        tau (int): time delay that maximises MI
-        m (int): embedding dimension that first approaches 0 false nearest neighbours
+        tau (int): first minima of MI between time series and tau delayed version of itself
     
     """
     import numpy as np
+    from scipy.signal import argrelextrema
     
     MI_list = []
     for i in range(1,21):
         MI_list = np.append(MI_list,[MI(data,i,50)])
 
-    tau = np.where(MI_list == np.min(MI_list))[0][0] + 1
+    tau = argrelextrema(MI_list, np.less)[0][0] #find the first minima of MI function
+    return(tau)
+
+
+
+#==============================================    
+def find_E_FNN(data, tau, thresh):
+#==============================================    
+    """
+    This function finds the embedding dimension E that approaches 0 false nearest neighbours - what embedding unfolds the manifold so that nearest neighbours become preserved. 
+    
+    Inputs:
+        data (np array): 1d vector timeseries
+        tau (int): delay for embedding
+    
+    Returns:
+        m (int): embedding dimension that first approaches 0 false nearest neighbours
+    
+    """
+    import numpy as np
+    from scipy.signal import argrelextrema
 
     nFNN = []
     for i in range(1,15):
