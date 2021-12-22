@@ -21,6 +21,8 @@ https://www.science.org/doi/abs/10.1126/science.1227079
 
 'CCM.py' - functions for implementing convergent cross mapping
 
+'kedm_script.sh' - shell script for batch running kedm on salk system
+
 ### Notebooks
 
 'LCE.ipynb' - running and implementing LCE algorithm
