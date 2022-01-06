@@ -1,6 +1,60 @@
 #SORT
 #=============================
 #=============================
+    
+
+#=============================
+def list_series(length, num):
+#=============================
+    
+    """
+    This function creates a series of empty lists of the same dimension.
+    
+    
+    Inputs:
+        length (int): length of each empty list
+        num (int): number of lists
+        
+    returns:
+        out_l (list of list): list of list
+    
+    """
+    
+    out_l = [0]*num
+
+    for x,n in enumerate(range(num)):
+        out_l[x] = [0]*length
+    return(out_l)
+
+
+
+#=============================
+def h5_2dict(data):
+#=============================
+    """
+    This function converts h5 files into a dictionary by looping through all keys. 
+    
+    
+    Inputs:
+        data (h5): h5 file
+        
+    returns:
+        d (dict): dictionary
+    
+    """
+    
+    import h5py
+    import numpy as np
+    h5read = h5py.File(data, 'r')
+    par_l = np.array(h5read)
+    d = {}
+    for i in par_l:
+        d.update({i: np.array(h5read[i])})
+        
+    return(d)
+
+
+
 
 #=========================================
 def return_files(path, experiment, search):
@@ -215,6 +269,20 @@ def load_list(inp_list):
 #PROCESS
 #=============================
 #==============================
+
+#===============================
+def par_save_name(name, par):
+#===============================
+
+    
+    """
+    This function saves name with a parameter, placing it before run.
+    """
+    
+    pref = name[:name.find('run')]
+    run = name[name.find('run'):name.find('run')+6]
+    return(pref + par + run)
+
 
 #================================================
 def select_region(trace, coord, region):
@@ -462,6 +530,28 @@ def timeprint(per, r, numrows, name):
 #MATHS
 #=============================
 #=============================
+
+#===============================
+def linear_dimensionality(data):
+#===============================
+    """
+    This function calculate the dimensionality as a measure of the equal/unequal weighting across all eigenvalues.
+    
+    Inputs:
+        data (np array): covariance matrix
+        
+    
+    Returns:
+        dim (float): dimensionality
+    
+    """
+    import numpy as np
+    
+    v = np.linalg.eigh(data)[0]
+    dim = (np.sum(v)**2)/np.sum((v**2))
+    
+    return(dim)
+
 
 #=======================================================================================
 def window(size, times): #make window of given size that is divisible by time series
