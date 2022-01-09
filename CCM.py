@@ -1,4 +1,4 @@
-import admin_functions_salk as adfn
+import admin_functions as adfn
 import LCE as lfn
 #----------------------------------------------------------------------
 Fcode = '/nadata/mnlsc/home/dburrows/Documents/empirical_dynamic_modelling/'
