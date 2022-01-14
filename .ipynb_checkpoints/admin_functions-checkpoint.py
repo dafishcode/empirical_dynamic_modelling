@@ -1,6 +1,60 @@
 #SORT
 #=============================
 #=============================
+    
+
+#=============================
+def list_series(length, num):
+#=============================
+    
+    """
+    This function creates a series of empty lists of the same dimension.
+    
+    
+    Inputs:
+        length (int): length of each empty list
+        num (int): number of lists
+        
+    returns:
+        out_l (list of list): list of list
+    
+    """
+    
+    out_l = [0]*num
+
+    for x,n in enumerate(range(num)):
+        out_l[x] = [0]*length
+    return(out_l)
+
+
+
+#=============================
+def h5_2dict(data):
+#=============================
+    """
+    This function converts h5 files into a dictionary by looping through all keys. 
+    
+    
+    Inputs:
+        data (h5): h5 file
+        
+    returns:
+        d (dict): dictionary
+    
+    """
+    
+    import h5py
+    import numpy as np
+    h5read = h5py.File(data, 'r')
+    par_l = np.array(h5read)
+    d = {}
+    for i in par_l:
+        d.update({i: np.array(h5read[i])})
+        
+    return(d)
+
+
+
 
 #=========================================
 def return_files(path, experiment, search):
@@ -216,6 +270,20 @@ def load_list(inp_list):
 #=============================
 #==============================
 
+#===============================
+def par_save_name(name, par):
+#===============================
+
+    
+    """
+    This function saves name with a parameter, placing it before run.
+    """
+    
+    pref = name[:name.find('run')]
+    run = name[name.find('run'):name.find('run')+6]
+    return(pref + par + run)
+
+
 #================================================
 def select_region(trace, coord, region):
 #================================================
@@ -263,7 +331,7 @@ def save_shared_files(path, son_path, mode):
     Inputs:
     path (string): name of parent path
     son_path (string): name of code folder 
-    mode (string): define which file to save: 'admin', criticality' or 'lce'
+    mode (string): define which file to save: 'admin', 'criticality', 'lce', or 'trace'
     
     """
 
@@ -294,6 +362,10 @@ def save_shared_files(path, son_path, mode):
     if mode == 'lce':
         file_list = return_files(path , son_path, 'LCE.py' ) #search for LCE file in current directory
         path_list = ['empirical_dynamic_modelling', 'seizure_dynamics'] #CHANGE AS NEEDED!
+        
+    if mode == 'trace':
+        file_list = return_files(path , son_path, 'trace_analyse.py' ) #search for trace_analyse file in current directory
+        path_list = ['criticality', 'avalanche_model', 'plasticity_model', 'mutant_analysis'] #CHANGE AS NEEDED!
         
         
     loop_dir(file_list, path_list) 
@@ -463,6 +535,7 @@ def timeprint(per, r, numrows, name):
 #=============================
 #=============================
 
+
 #=======================================================================================
 def window(size, times): #make window of given size that is divisible by time series
 #=======================================================================================
@@ -599,7 +672,7 @@ def multi_plot(data_list, col_list, plot_type, size, rows, cols):
         
         
 #=======================================================================================     
-def bar_scatter_plot(dic, data_name, fig_size, bar_size, dot_size, mean_colours, colours):
+def bar_scatter_plot(dic, data_name, fig_size, bar_size, dot_size, colours):
 #=======================================================================================
     """
     Plot a bar and scatter plot with mean and individual data points. 
@@ -610,7 +683,6 @@ def bar_scatter_plot(dic, data_name, fig_size, bar_size, dot_size, mean_colours,
         fig_size (tuple): figure size
         bar_size (float): size of mean bar
         dot_size (float): size of dot
-        mean_colors (list): color of bars
         colours (list): colors of data points
 
     """
@@ -623,12 +695,12 @@ def bar_scatter_plot(dic, data_name, fig_size, bar_size, dot_size, mean_colours,
     
 
     fig, ax = plt.subplots(figsize = fig_size)
-    ax = sns.pointplot(x="condition", y=data_name, data = dic, hue = 'condition', palette = mean_colours, join=True, ci=0, scale=bar_size, markers = '_')
+    ax = sns.pointplot(x="condition", y=data_name, data = dic, hue = 'condition', palette = colours, join=True, ci=0, scale=bar_size, markers = '_')
     for artist in ax.lines:
         artist.set_zorder(10)
     for artist in ax.findobj(PathCollection):
         artist.set_zorder(11)
-    ax = sns.stripplot(x="condition", y=data_name, data = dic,hue = 'subject', palette = colours, size = dot_size, jitter = True ,alpha = 1)
+    ax = sns.stripplot(x="condition", y=data_name, data = dic,hue = 'condition', palette = colours, size = dot_size, jitter = True ,alpha = 1)
 
     plt.yticks(size = 20)
     points = ax.collections

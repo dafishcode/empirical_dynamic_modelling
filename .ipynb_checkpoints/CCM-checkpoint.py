@@ -1,9 +1,12 @@
 import admin_functions as adfn
+import LCE as lfn
+#----------------------------------------------------------------------
+Fcode = '/nadata/mnlsc/home/dburrows/Documents/empirical_dynamic_modelling/'
+Fdata = '/nadata/mnlsc/home/dburrows/Documents/PTZ-WILDTYPE-CCM/'
 
-Fdata = '/Users/dominicburrows/Dropbox/PhD/analysis/Project/PTZ-WILDTYPE-CCM/'
 
 #=================================
-def CCM_sort(co, tr, dff, name, mode):
+def CCM_sort(co, tr, dff, name):
 #=================================
 
     """
@@ -14,7 +17,6 @@ def CCM_sort(co, tr, dff, name, mode):
         trace (np array): cells x timepoints, raw fluorescence values
         dff (np array): cells x timepoints, normalised fluorescence values
         name (str): fish name for saving
-        mode (str): 'single' assumes file is continuous and saves as a single file; 'comb_3' assumes file should be split in 3. 
     
     Returns:
         f_dict (dict): dictionary containing coordinates, mean trace, trace, mean dff, and dff for all neurons in brain.
@@ -44,74 +46,19 @@ def CCM_sort(co, tr, dff, name, mode):
         mean_dff =  np.apply_along_axis(np.mean, 0, sub_dff)
         
         
-        if mode == 'single':
-            #PUT INTO DICT
-            f_dict = { 'coord': sub_co, 'mean trace' : mean_tr, 'trace': sub_tr, 'mean dff' : mean_dff, 'dff' : sub_dff}
-            
-            
-            # CONVERT TO HDF5
-            trace_list = ['trace', 'dff']
-            #loop through each trace type
-            for i in trace_list:
-                full_name = name + '_' + i + '_pre-CCM.h5'
-                #concatenate with mean trace at the top for kEDM
-                array = np.vstack((f_dict['mean ' + i], f_dict[i])).T
-                np2h5(full_name, array)
-                
-                
-        if mode == 'comb_2':
-            num = 9009
-                
-                #PUT INTO DICT
-                #THIS IS MADE FOR THE FIRST 5MINS BEING CUTOFF - CHANGE IF NEEDED!!!!
-            f_dict = { 'coord': sub_co, 'BLN mean trace' : mean_tr[:num], 'BLN trace': sub_tr[:,:num], 'BLN mean dff' : mean_dff[:num], 'BLN dff' : sub_dff[:,:num],
-                         'PTZ05 mean trace' : mean_tr[num:], 'PTZ05 trace': sub_tr[:,num:], 'PTZ05 mean dff' : mean_dff[num:], 'PTZ05 dff' : sub_dff[:,num:]}
-            
-            
-            # CONVERT TO HDF5
-            trace_list = ['trace', 'dff']
-            cond_list = ['BLN', 'PTZ05']
-            #loop through each trace type
-            for i in trace_list:
-                for e in cond_list:
-                    full_name = name[0:-6] + e + "_" + name[-6:] + '_' + i + '_pre-CCM.h5'
-                    #concatenate with mean trace at the top for kEDM
-                    array = np.vstack((f_dict[e + ' mean ' + i], f_dict[e + ' ' + i])).T
-                    np2h5(full_name, array)
-    
-           
-        
-        if mode == 'comb_3':
-            #Check that each segment has the same length
-            if sub_tr.shape[1]%9828 == 0 and sub_dff.shape[1]%9828 == 0:
-                
-                num = 9828
-                
-                #PUT INTO DICT
-                f_dict = { 'coord': sub_co, 'BLN mean trace' : mean_tr[:num], 'BLN trace': sub_tr[:,:num], 'BLN mean dff' : mean_dff[:num], 'BLN dff' : sub_dff[:,:num],
-                         'PTZ05 mean trace' : mean_tr[num:2*num], 'PTZ05 trace': sub_tr[:,num:2*num], 'PTZ05 mean dff' : mean_dff[num:2*num], 'PTZ05 dff' : sub_dff[:,num:2*num],
-                         
-                         'PTZ20 mean trace' : mean_tr[2*num:], 'PTZ20 trace': sub_tr[:,2*num:], 'PTZ20 mean dff' : mean_dff[2*num:], 'PTZ20 dff' : sub_dff[:,2*num:]}
-            
-            
-                # CONVERT TO HDF5
-                trace_list = ['trace', 'dff']
-                cond_list = ['BLN', 'PTZ05', 'PTZ20']
-                #loop through each trace type
-                for i in trace_list:
-                    for e in cond_list:
-                        full_name = name[0:-6] + e + "_" + name[-6:] + '_' + i + '_pre-CCM.h5'
-                        #concatenate with mean trace at the top for kEDM
-                        array = np.vstack((f_dict[e + ' mean ' + i], f_dict[e + ' ' + i])).T
-                        np2h5(full_name, array)
+        #PUT INTO DICT
+        f_dict = { 'coord': sub_co, 'mean trace' : mean_tr, 'trace': sub_tr, 'mean dff' : mean_dff, 'dff' : sub_dff}
 
-            
-            else:
-                print('Data has non equal condition lengths')
-                return()
+
+        # CONVERT TO HDF5
+        trace_list = ['trace', 'dff']
+        #loop through each trace type
+        for i in trace_list:
+            full_name = name + '_' + i + '_pre-CCM.h5'
+            #concatenate with mean trace at the top for kEDM
+            array = np.vstack((f_dict['mean ' + i], f_dict[i])).T
+            np2h5(full_name, array)
               
-                
-             
         np.save(Fdata + '/' + mode + '/' + name + '_pre-CCM.npy', f_dict)
             
         return(f_dict)
@@ -119,13 +66,161 @@ def CCM_sort(co, tr, dff, name, mode):
     else:
         print("data wrong shape")
         return()
+    
 
 
 
+#===============================
+def simplex_project(data, E, tau, t_range):
+#===============================
+
+    """
+    This function performs simplex projection over t time steps. Briefly, it splits a time series in library and prediction sets.
+    It then embeds the library manifold in E dimensions, using E time lags. For each point p (embedded in E dim space) in the 
+    prediction timeseries, the algorithm finds the E+1 nearest neighbours in the library manifold which forms a simplex around 
+    the point p. The algorithm then iterates t time steps into the future, predicting the position of point p at t using the 
+    positions of each neighbour at t exponentially weighted by the distances from p at t0. Finally the correlation between true
+    and predicted values are returned. See: Sugihara et al. 'Nonlinear Forecasting as a way of distinguishing chaos from measurement
+    error in time series'.
+    
+    
+    Inputs:
+        data (np array): 1d vector of time series to perform simplex projection. 
+        E (int): embedding dimension
+        tau (int): time delay to use for embedding
+        t_range (int): how many time steps ahead to predict
+        
+    
+    Returns:
+        corr_vec (list): list of correlations for each t
+        
+    """
+
+    from scipy import spatial
+    import numpy as np
+
+    corr_list = list_series(2, t_range) # for each time prediction there should be a 2d list to put in real and pred values
+
+
+    # split data in half into library and prediction
+    lib = data[:data.shape[0]//2]
+    pred = data[data.shape[0]//2:]
+
+    # Build manifold with given E and tau
+    lib_m = lfn.takens_embed(E, tau, lib)
+    pred_m = lfn.takens_embed(E, tau, pred)
+
+    #find the E+1 nearest neighbours in library
+    dist_mat = spatial.distance_matrix(pred_m, lib_m) #compute distances between all points
+    nn_num = E+1 #how many nearest neighbours to find
+
+
+    #Loop through each point in pred
+    for num in range(pred_m.shape[0]):
+
+        # Find nearest neighbours in library for each pred_m point
+        current_point = pred_m[num]
+        curr_dist = dist_mat[num]
+        nn_ind = sorted(range(len(curr_dist)), key=lambda k: curr_dist[k])[:nn_num] #return indeces of nearest neighbours in library
+
+        #Calculate weights for simplex projection - weights are calculated from nn distance at t0
+        nn = lib_m[nn_ind] #positions of nearest neighbours in library, to current point in pred at t0
+        nn_dist = dist_mat[num, nn_ind]  #distances of each nn to our pred point
+        w_mat = np.exp(-1*(nn_dist/np.min(nn_dist))) #matrix of weights for each nn 
+
+        # Loop in time and predict
+        for t in range(1, t_range+1):
+
+            # Where do nn end up at t + n
+            nn_ind_tp = np.array(nn_ind) + t #find indeces of neighbours in the future for simplex projection
+
+            if sum(nn_ind_tp >= lib_m.shape[0]) >0: #ignore points whose boundaries go outside the data 
+                continue 
+
+            nn_tp = lib_m[nn_ind_tp] # locations of neighbours in future
+
+            #Simple project - how much do the positions of neighbours relative to point of interest change over time 
+            #use weights from t 0
+            #use neighbour points from t + n
+            x_tp = pred[num] #Point I am trying to predict
+
+            x_tp_pred = 0 
+            for nn_i in range(w_mat.shape[0]): #Loop through each nn and sum over the weight*position at tp
+                x_tp_pred+= (w_mat[nn_i]/np.sum(w_mat))*nn_tp[nn_i]
+            x_tp_pred = x_tp_pred[0] #project back into 1d space
+
+            corr_list[t-1][0] = np.append(corr_list[t-1][0], x_tp) #true
+            corr_list[t-1][1] = np.append(corr_list[t-1][1], x_tp_pred) #estimated
+        
+        #Calculate correlation coefficient
+        corr_vec = []
+        for f in range(len(corr_list)): corr_vec = np.append(corr_vec, np.corrcoef(corr_list[f][0][1:],corr_list[f][1][1:])[0][1])
+    return(np.array(corr_vec))
+    
+    
+#===============================
+def find_E_simplex(data, tau, E_range, t_range):
+#===============================
+
+    """
+    This function runs simplex projection over a range of E values with a given tau, 
+    and returns the E with greatest correlation between real variable and predicted. 
+    
+    
+    Inputs:
+        data (np array): 1d vector of time series to perform simplex projection. 
+        tau (int): time delay to use for embedding
+        E_range (int): how many embedding dimensions to check
+        t_range (int): how many time steps ahead to predict
+        
+    
+    Returns:
+        E (int): optimal embedding dimension that best unfolds the manifold
+
+        
+    """
+    import numpy as np
+
+    corr_l = [0]*E_range
+    for E in range(1, E_range+1):
+        corr_l[E-1] = simplex_project(data, E, tau, t_range)
+        print('Done E = ' + str(E))
+
+    E = np.where(corr_l == np.max(corr_l))[0][0] + 1
+    return(E)
 
 
 
+#=====================================
+def kspace_meantrace(coord, trace, k):
+#=====================================
+    """
+    This function performs kmeans on spatial coordinates and averages cell traces. 
+    
+    Inputs:
+        coord (np array): X x Y x Z coordinates
+        trace (np array): signal x time
+        k (int): k clusters
+    
+    Returns:
+        k_coord (np array): space x dimension for clustered cells
+        k_trace (np array): signal x time for clustered cells
 
+    """
+
+    from scipy.cluster.vq import kmeans2
+    import numpy as np
+    
+    k_coord, k_lab = kmeans2(coord, k) #Perform k means
+    k_coord = k_coord[np.unique(k_lab)] #remove empty clusters
+
+    k_trace = np.zeros((len(np.unique(k_lab)),trace.shape[1]))  
+    for x,n in enumerate(np.unique(k_lab)): #loop through all clusters
+        sub_trace = trace[k_lab == n] #Find traces of clustered coords 
+        k_trace[x] = np.apply_along_axis(np.mean, 0, sub_trace)
+    
+    return(k_coord, k_trace)
+    
 
 
 
@@ -154,3 +249,5 @@ def E_ccm_heatmap(E, ccm, n_bins):
         hist[count] = np.histogram(np.ravel(ccm[np.where(E == i)]), bins = np.linspace(0, 1, n_bins+1))[0]
         count+=1
     return(hist)
+
+
