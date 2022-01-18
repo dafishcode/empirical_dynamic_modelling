@@ -126,11 +126,13 @@ def simplex_project(data, E, tau, t_range):
         corr_vec (list): list of correlations for each t
         
     """
+#FIGURE OUT WHAT TO DO WITH NEIGHBOURS THAT GO OFF MANIFOLD
 
+def simplex(data, E, tau, t_range):
     from scipy import spatial
     import numpy as np
-
-    corr_list = list_series(2, t_range) # for each time prediction there should be a 2d list to put in real and pred values
+    
+    corr_list = [0]*t_range
 
 
     # split data in half into library and prediction
@@ -138,8 +140,14 @@ def simplex_project(data, E, tau, t_range):
     pred = data[data.shape[0]//2:]
 
     # Build manifold with given E and tau
-    lib_m = lfn.takens_embed(E, tau, lib)
-    pred_m = lfn.takens_embed(E, tau, pred)
+    lib_m = takens_embed(E, tau, lib)
+    pred_m = takens_embed(E, tau, pred)
+
+    x_tp_m = np.zeros((t_range,pred_m.shape[0])) #Matrix to enter values you are trying to predict
+    x_tp_pred_m = np.zeros((t_range, pred_m.shape[0])) #Matrix to values you have predicted
+    x_tp_m[:] = np.nan #Make all nan to deal with empty values
+    x_tp_pred_m[:] = np.nan
+
 
     #find the E+1 nearest neighbours in library
     dist_mat = spatial.distance_matrix(pred_m, lib_m) #compute distances between all points
@@ -147,7 +155,8 @@ def simplex_project(data, E, tau, t_range):
 
 
     #Loop through each point in pred
-    for num in range(pred_m.shape[0]):
+    for num in range(pred_m.shape[0]-t_range):
+
 
         # Find nearest neighbours in library for each pred_m point
         current_point = pred_m[num]
@@ -166,29 +175,30 @@ def simplex_project(data, E, tau, t_range):
             nn_ind_tp = np.array(nn_ind) + t #find indeces of neighbours in the future for simplex projection
 
             if sum(nn_ind_tp >= lib_m.shape[0]) >0: #ignore points whose boundaries go outside the data 
-                continue 
+                continue
 
             nn_tp = lib_m[nn_ind_tp] # locations of neighbours in future
 
-            #Simple project - how much do the positions of neighbours relative to point of interest change over time 
+            #Simplex project - how much do the positions of neighbours relative to point of interest change over time 
             #use weights from t 0
             #use neighbour points from t + n
-            x_tp = pred[num] #Point I am trying to predict
 
-            x_tp_pred = 0 
+            x_tp = pred[num] #Point I am trying to predict 
+            x_tp_pred = 0
             for nn_i in range(w_mat.shape[0]): #Loop through each nn and sum over the weight*position at tp
                 x_tp_pred+= (w_mat[nn_i]/np.sum(w_mat))*nn_tp[nn_i]
             x_tp_pred = x_tp_pred[0] #project back into 1d space
 
-            corr_list[t-1][0] = np.append(corr_list[t-1][0], x_tp) #true
-            corr_list[t-1][1] = np.append(corr_list[t-1][1], x_tp_pred) #estimated
-        
-        #Calculate correlation coefficient
-        corr_vec = []
-        for f in range(len(corr_list)): corr_vec = np.append(corr_vec, np.corrcoef(corr_list[f][0][1:],corr_list[f][1][1:])[0][1])
-    return(np.array(corr_vec))
-    
+            x_tp_m[t-1,num] = x_tp #true 
+            x_tp_pred_m[t-1,num+t] = x_tp_pred  #estimated - NB you are estimating the future value at t, not the original
 
+    #Calculate correlation coefficient
+    for i in range(t_range):
+        my = {'Obs': x_tp_m[i], 'Pred': x_tp_pred_m[i]}
+        my_df = pd.DataFrame(data=my) 
+        corr_list[i] = my_df.corr()['Obs']['Pred']
+        
+    return(corr_list,[x_tp_m, x_tp_pred_m])
 
 
 #PARAMETER ESTIMATION
