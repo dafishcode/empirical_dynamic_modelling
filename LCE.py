@@ -33,7 +33,7 @@ def takens_embed(m, tau, data):
     
     Inputs:
         m (int): embedding dimension
-        tau (int): time lag
+        tau (int): time lag into past
         data (np array): 1d vector time series for reconstruction  
     
     Returns:
@@ -41,11 +41,19 @@ def takens_embed(m, tau, data):
     
     """
     import numpy as np
+    data_embed = np.zeros((data.shape[0] - ((m-1)*tau), m))
     
-    data_embed = np.zeros((data.shape[0] - (m*tau), m))
+    #loop through each dimension
     for i in range(0, m):
-        data_embed[:,i] = data[(i*tau):-1* ((m*tau)-(i*tau))]
-    return(data_embed)
+        
+        if i == m-1:
+            data_embed[:,(m-1)-i] = data[(i*tau):]
+        
+        else:
+            data_embed[:,(m-1)-i] = data[(i*tau):-1* ((m*tau)-((i+1)*tau))]
+
+    return(np.array(data_embed))
+
 
 
 #==============================================    
@@ -101,107 +109,9 @@ def LE_embed(data, tau):
     return(le)
 
 
-#===============================
-def simplex_project(data, E, tau, t_range):
-#===============================
-
-    """
-    This function performs simplex projection over t time steps. Briefly, it splits a time series in library and prediction sets.
-    It then embeds the library manifold in E dimensions, using E time lags. For each point p (embedded in E dim space) in the 
-    prediction timeseries, the algorithm finds the E+1 nearest neighbours in the library manifold which forms a simplex around 
-    the point p. The algorithm then iterates t time steps into the future, predicting the position of point p at t using the 
-    positions of each neighbour at t exponentially weighted by the distances from p at t0. Finally the correlation between true
-    and predicted values are returned. See: Sugihara et al. 'Nonlinear Forecasting as a way of distinguishing chaos from measurement
-    error in time series'.
-    
-    
-    Inputs:
-        data (np array): 1d vector of time series to perform simplex projection. 
-        E (int): embedding dimension
-        tau (int): time delay to use for embedding
-        t_range (int): how many time steps ahead to predict
-        
-    
-    Returns:
-        corr_vec (list): list of correlations for each t
-        
-    """
-#FIGURE OUT WHAT TO DO WITH NEIGHBOURS THAT GO OFF MANIFOLD
-
-def simplex(data, E, tau, t_range):
-    from scipy import spatial
-    import numpy as np
-    
-    corr_list = [0]*t_range
 
 
-    # split data in half into library and prediction
-    lib = data[:data.shape[0]//2]
-    pred = data[data.shape[0]//2:]
-
-    # Build manifold with given E and tau
-    lib_m = takens_embed(E, tau, lib)
-    pred_m = takens_embed(E, tau, pred)
-
-    x_tp_m = np.zeros((t_range,pred_m.shape[0])) #Matrix to enter values you are trying to predict
-    x_tp_pred_m = np.zeros((t_range, pred_m.shape[0])) #Matrix to values you have predicted
-    x_tp_m[:] = np.nan #Make all nan to deal with empty values
-    x_tp_pred_m[:] = np.nan
-
-
-    #find the E+1 nearest neighbours in library
-    dist_mat = spatial.distance_matrix(pred_m, lib_m) #compute distances between all points
-    nn_num = E+1 #how many nearest neighbours to find
-
-
-    #Loop through each point in pred
-    for num in range(pred_m.shape[0]-t_range):
-
-
-        # Find nearest neighbours in library for each pred_m point
-        current_point = pred_m[num]
-        curr_dist = dist_mat[num]
-        nn_ind = sorted(range(len(curr_dist)), key=lambda k: curr_dist[k])[:nn_num] #return indeces of nearest neighbours in library
-
-        #Calculate weights for simplex projection - weights are calculated from nn distance at t0
-        nn = lib_m[nn_ind] #positions of nearest neighbours in library, to current point in pred at t0
-        nn_dist = dist_mat[num, nn_ind]  #distances of each nn to our pred point
-        w_mat = np.exp(-1*(nn_dist/np.min(nn_dist))) #matrix of weights for each nn 
-
-        # Loop in time and predict
-        for t in range(1, t_range+1):
-
-            # Where do nn end up at t + n
-            nn_ind_tp = np.array(nn_ind) + t #find indeces of neighbours in the future for simplex projection
-
-            if sum(nn_ind_tp >= lib_m.shape[0]) >0: #ignore points whose boundaries go outside the data 
-                continue
-
-            nn_tp = lib_m[nn_ind_tp] # locations of neighbours in future
-
-            #Simplex project - how much do the positions of neighbours relative to point of interest change over time 
-            #use weights from t 0
-            #use neighbour points from t + n
-
-            x_tp = pred[num] #Point I am trying to predict 
-            x_tp_pred = 0
-            for nn_i in range(w_mat.shape[0]): #Loop through each nn and sum over the weight*position at tp
-                x_tp_pred+= (w_mat[nn_i]/np.sum(w_mat))*nn_tp[nn_i]
-            x_tp_pred = x_tp_pred[0] #project back into 1d space
-
-            x_tp_m[t-1,num] = x_tp #true 
-            x_tp_pred_m[t-1,num+t] = x_tp_pred  #estimated - NB you are estimating the future value at t, not the original
-
-    #Calculate correlation coefficient
-    for i in range(t_range):
-        my = {'Obs': x_tp_m[i], 'Pred': x_tp_pred_m[i]}
-        my_df = pd.DataFrame(data=my) 
-        corr_list[i] = my_df.corr()['Obs']['Pred']
-        
-    return(corr_list,[x_tp_m, x_tp_pred_m])
-
-
-#PARAMETER ESTIMATION
+#EMBEDDING PARAMETER ESTIMATION
 #==============================================
 
 #==============================================
@@ -312,86 +222,290 @@ def FNN(data,tau,m, thresh):
 
 
 
-#==============================================    
-def find_tau(data):
-#==============================================    
-    """
-    This function finds the tau that minimises the MI - provides most independent information to initial time series. 
+#CONVERGENT CROSS MAP ESTIMATE
+
+def CCM(l_range, lib_m, pred_m):
+    import random
+    import scipy
+
+    true_l, pred_l = [0]*len(l_range), [0]*len(l_range)
+    corr_l = [0]*len(l_range)
+
+    #Cross map as you fi
+    for e,l in enumerate(l_range):
+        t_l = random.sample(range(lib_m.shape[0]),l) #Randomly sample
+        lib_m_sub, pred_m_sub = lib_m[t_l], pred_m[t_l]
+        true, pred = crossmap(lib_m_sub, pred_m_sub) #Run cross map
+        true_l[e], pred_l[e] = true,pred
+        corr_l[e] = scipy.stats.pearsonr(true, pred)[0]
+    return(corr_l, true_l, pred_l)
+
+def crossmap(lib_m, pred_m):
     
-    Inputs:
-        data (np array): 1d vector timeseries
+    x_m = np.zeros(pred_m.shape[0]) #Matrix to enter values you are trying to predict
+    x_pred_m = np.zeros(pred_m.shape[0]) #Matrix to values you have predicted
+    x_m[:], x_pred_m[:] = np.nan, np.nan #Make all nan to deal with empty values
+
+    #find the E+1 nearest neighbours in library
+    dist_mat = spatial.distance_matrix(lib_m, lib_m) #compute distances between all points against themselves
+    nn_num = E+1 #how many nearest neighbours to find
     
-    Returns:
-        tau (int): first minima of MI between time series and tau delayed version of itself
+    #Loop through each time step in lib
+    for t in range(lib_m.shape[0]):
+        # Find nearest neighbours in library for current point in library
+        current_point = lib_m[t]
+        curr_dist = dist_mat[t]
+        nn_ind = sorted(range(len(curr_dist)), key=lambda k: curr_dist[k])[:nn_num+1][1:] #return indeces 
+
+        nn = lib_m[nn_ind] #positions of nearest neighbours in library, to current point in lib
+        nn_pred = pred_m[nn_ind] #positions of points in pred, labelled by indeces of nearest neighbours in lib to point in lib
+
+        #Reconstruct pred point
+        #Use weights calculated from distances between lib point and its nearest neighbours in lib
+        #Use coordinates of pred points sharing time indeces with lib nearest neighbours
+
+        #CALCULATE WEIGHTS
+        nn_dist = dist_mat[t, nn_ind]  #distances of each nn to our pred point
+        w_mat = np.exp(-1*(nn_dist/np.min(nn_dist))) #matrix of weights for each nn 
+
+        #SUM OVER ALL PRED POINTS
+        x_ = pred_m[t][0] # Value I am trying to predict
+        x_pred = 0 # Predicted value
+        for nn_i in range(w_mat.shape[0]): #Loop through each nn in lib and sum over the weight*position in pred
+            x_pred+= (w_mat[nn_i]/np.sum(w_mat))*nn_pred[nn_i]
+        x_pred = x_pred[0] #project back into 1d space
+
+        #Populate vectors
+        x_m[t] = x_
+        x_pred_m[t] = x_pred
+        
+    return(x_m, x_pred_m)
     
-    """
+    
+#add in options to scan or just pick one tp - i.e t_range = 
+#add in mode to skip or fill 'off-manifold' values
+def simplex(data, E, tau, t_range):
+    from scipy import spatial
     import numpy as np
-    from scipy.signal import argrelextrema
+
+    corr_list = [0]*t_range
+
+
+    # split data in half into library and prediction
+    lib = data[:data.shape[0]//2]
+    pred = data[data.shape[0]//2:]
+
+    # Build manifold with given E and tau
+    lib_m = takens_embed(E, tau, lib)
+    pred_m = takens_embed(E, tau, pred)
+
+    x_tp_m = np.zeros((t_range,pred_m.shape[0])) #Matrix to enter values you are trying to predict
+    x_tp_pred_m = np.zeros((t_range, pred_m.shape[0])) #Matrix to values you have predicted
+    x_tp_m[:] = np.nan #Make all nan to deal with empty values
+    x_tp_pred_m[:] = np.nan
+
+
+    #find the E+1 nearest neighbours in library
+    dist_mat = spatial.distance_matrix(pred_m, lib_m) #compute distances between all points
+    nn_num = E+1 #how many nearest neighbours to find
+
+
+    #Loop through each point in pred
+    for num in range(pred_m.shape[0]-t_range):
+
+        # Find nearest neighbours in library for each pred_m point
+        current_point = pred_m[num]
+        curr_dist = dist_mat[num]
+        nn_ind = sorted(range(len(curr_dist)), key=lambda k: curr_dist[k])[:nn_num] #return indeces of nearest neighbours in library
+
+        #Calculate weights for simplex projection - weights are calculated from nn distance at t0
+        nn = lib_m[nn_ind] #positions of nearest neighbours in library, to current point in pred at t0
+        nn_dist = dist_mat[num, nn_ind]  #distances of each nn to our pred point
+        w_mat = np.exp(-1*(nn_dist/np.min(nn_dist))) #matrix of weights for each nn 
+
+        # Loop in time and predict
+        for t in range(1, t_range+1):
+
+            # Where do nn end up at t + n
+            nn_ind_tp = np.array(nn_ind) + t #find indeces of neighbours in the future for simplex projection
+
+            #Deal with points that go off manifold at t - find next nearest neighbours 
+            if sum(nn_ind_tp >= lib_m.shape[0]) >0:
+                #continue
+                
+                #Replace neighbours that go off manifold at t with neighbours that dont, and recalculate weights
+                nn_ind_tp, w_mat = shift_nn(lib_m.shape[0], lib_m, dist_mat, np.array(nn_ind), nn_ind_tp, curr_dist, nn_num, num, t)
+                
+            nn_tp = lib_m[nn_ind_tp] # locations of neighbours in future
+
+            #Simplex project - how much do the positions of neighbours relative to point of interest change over time 
+            #use weights from t 0
+            #use neighbour points from t + n
+            x_tp = pred_m[num][0] #Point I am trying to predict 
+            x_tp_pred = 0
+            for nn_i in range(w_mat.shape[0]): #Loop through each nn and sum over the weight*position at tp
+                x_tp_pred+= (w_mat[nn_i]/np.sum(w_mat))*nn_tp[nn_i]
+            x_tp_pred = x_tp_pred[0] #project back into 1d space
+
+            x_tp_m[t-1,num] = x_tp #true 
+            x_tp_pred_m[t-1,num+t] = x_tp_pred  #estimated - NB you are estimating the future value at t, not the original
+
+    #Calculate correlation coefficient
+    for i in range(t_range):
+        my = {'Obs': x_tp_m[i], 'Pred': x_tp_pred_m[i]}
+        my_df = pd.DataFrame(data=my) 
+        corr_list[i] = my_df.corr()['Obs']['Pred']
+        
+    return(corr_list,[x_tp_m, x_tp_pred_m])
+
+
+def shift_nn(shape, lib_m, dist_mat, nn_ind, nn_ind_tp, curr_dist, nn_num, num, t): 
+    #This function deals with points that go off manifold at t - finds next nearest neighbours 
+    nn_off = np.sum(nn_ind_tp >= shape) #Number of nearest neighbours that go off manifold at time t
+    nn_rem = sorted(range(len(curr_dist)), key=lambda k: curr_dist[k])[nn_num:] #return indeces of ordered remaining nearest neighbours not currently included
+
+    count = 0
+    new_nn_tp_l, new_nn_l = [],[]
+    for nn in nn_rem: #loop through each remaining neighbour
+        if nn + t < shape: #if index of nn + t is on manifold, add to list and count
+            new_nn_l = np.append(new_nn_l, nn) #add indeces of new neighbours at t0
+            new_nn_tp_l = np.append(new_nn_tp_l, nn+t) #add indeces of new neighbours at tp
+            count +=1 
+            if count == nn_off: #Stop loop once you have enough neighbours
+                break
+
+    nn_on = nn_ind[nn_ind_tp < shape] #Indeces of OG nearest neighbours at t0 that stay on the manifold into t
+    nn_tp_on = nn_ind_tp[nn_ind_tp < shape] #Indeces of OG nearest neighbours at t that stay on the manifold at t
     
-    MI_list = []
-    for i in range(1,21):
-        MI_list = np.append(MI_list,[MI(data,i,50)])
+    new_nn_ind = (np.append(nn_on, new_nn_l)).astype(int) #add nearest neighbour points at t0 that stay on manifold up to tp, to new points
+    new_nn_ind_tp = (np.append(nn_tp_on, new_nn_tp_l)).astype(int) #add nearest neighbour points at tp that stay on manifold, to new points
+    
+    
+    nn = lib_m[new_nn_ind] #positions of nearest neighbours in library, to current point in pred at t0
+    nn_dist = dist_mat[num, new_nn_ind]  #distances of each nn to our pred point
+    w_mat = np.exp(-1*(nn_dist/np.min(nn_dist))) #matrix of weights for each nn
+    
+    return(new_nn_ind_tp, w_mat)
 
-    tau = argrelextrema(MI_list, np.less)[0][0] #find the first minima of MI function
-    return(tau)
 
+#====================================
+def simplex_project(data, E, tau, t):
+#====================================
 
-
-#==============================================    
-def find_E_FNN(data, tau, thresh):
-#==============================================    
     """
-    This function finds the embedding dimension E that approaches 0 false nearest neighbours - what embedding unfolds the manifold so that nearest neighbours become preserved. 
-    
-    Inputs:
-        data (np array): 1d vector timeseries
-        tau (int): delay for embedding
-    
-    Returns:
-        m (int): embedding dimension that first approaches 0 false nearest neighbours
-    
-    """
-    import numpy as np
-    from scipy.signal import argrelextrema
-
-    nFNN = []
-    for i in range(1,15):
-        nFNN.append(FNN(data,tau,i, thresh) / len(data))
-
-    m = np.min(np.where(np.array(nFNN) ==0 )) + 1
-    return(tau,m)
-
-
-
-
-    
-#===============================
-def find_E_simplex(data, tau, E_range, t_range):
-#===============================
-
-    """
-    This function runs simplex projection over a range of E values with a given tau, 
-    and returns the E with greatest correlation between real variable and predicted. 
+    This function performs simplex projection over t time steps into the future. Briefly, it splits a time series in library and prediction sets.
+    It then embeds the library manifold in E dimensions, using E time lags. For each point p (embedded in E dim space) in the 
+    prediction timeseries, the algorithm finds the E+1 nearest neighbours in the library manifold which forms a simplex around 
+    the point p. The algorithm then predicts the position of point p at t using the positions of each neighbour at t exponentially weighted by 
+    the distances from p at t0. See: Sugihara et al. 'Nonlinear Forecasting as a way of distinguishing chaos from measurement error in time series'.
     
     
     Inputs:
         data (np array): 1d vector of time series to perform simplex projection. 
+        E (int): embedding dimension
         tau (int): time delay to use for embedding
-        E_range (int): how many embedding dimensions to check
-        t_range (int): how many time steps ahead to predict
+        t (int): how many time steps ahead to predict
         
     
     Returns:
-        E (int): optimal embedding dimension that best unfolds the manifold
-
+        corr_vec (list): list of correlations for each t
+        x_tp_m (np array): a vector of observations
+        x_tp_pred_m (np array): a vector of predictions
         
     """
+    from scipy import spatial
     import numpy as np
+    
+    
+    #==========================================
+    def shift_nn(shape, lib_m, dist_mat, nn_ind, nn_ind_tp, curr_dist, nn_num, num, t): 
+    #========================================== 
+    #This function deals with points that go off manifold at t - finds next nearest neighbours
+    
+        nn_off = np.sum(nn_ind_tp >= shape) #Number of nearest neighbours that go off manifold at time t
+        nn_rem = sorted(range(len(curr_dist)), key=lambda k: curr_dist[k])[nn_num:] #return indeces of ordered remaining nearest neighbours not currently included
 
-    corr_l = [0]*E_range
-    for E in range(1, E_range+1):
-        corr_l[E-1] = simplex_project(data, E, tau, t_range)
-        print('Done E = ' + str(E))
+        count = 0
+        new_nn_tp_l, new_nn_l = [],[]
+        for nn in nn_rem: #loop through each remaining neighbour
+            if nn + t < shape: #if index of nn + t is on manifold, add to list and count
+                new_nn_l = np.append(new_nn_l, nn) #add indeces of new neighbours at t0
+                new_nn_tp_l = np.append(new_nn_tp_l, nn+t) #add indeces of new neighbours at tp
+                count +=1 
+                if count == nn_off: #Stop loop once you have enough neighbours
+                    break
 
-    E = np.where(corr_l == np.max(corr_l))[0][0] + 1
-    return(E)
+        nn_on = nn_ind[nn_ind_tp < shape] #Indeces of OG nearest neighbours at t0 that stay on the manifold into t
+        nn_tp_on = nn_ind_tp[nn_ind_tp < shape] #Indeces of OG nearest neighbours at t that stay on the manifold at t
+
+        new_nn_ind = (np.append(nn_on, new_nn_l)).astype(int) #add nearest neighbour points at t0 that stay on manifold up to tp, to new points
+        new_nn_ind_tp = (np.append(nn_tp_on, new_nn_tp_l)).astype(int) #add nearest neighbour points at tp that stay on manifold, to new points
+
+
+        nn = lib_m[new_nn_ind] #positions of nearest neighbours in library, to current point in pred at t0
+        nn_dist = dist_mat[num, new_nn_ind]  #distances of each nn to our pred point
+        w_mat = np.exp(-1*(nn_dist/np.min(nn_dist))) #matrix of weights for each nn
+
+        return(new_nn_ind_tp, w_mat)
+    
+
+    # split data in half into library and prediction
+    lib = data[:data.shape[0]//2]
+    pred = data[data.shape[0]//2:]
+
+    # Build manifold with given E and tau
+    lib_m = lfn.takens_embed(E, tau, lib)
+    pred_m = lfn.takens_embed(E, tau, pred)
+
+    x_tp_m = np.zeros(pred_m.shape[0]) #Matrix to enter values you are trying to predict
+    x_tp_pred_m = np.zeros(pred_m.shape[0]) #Matrix to values you have predicted
+    x_tp_m[:] = np.nan #Make all nan to deal with empty values
+    x_tp_pred_m[:] = np.nan
+
+
+    #find the E+1 nearest neighbours in library
+    dist_mat = spatial.distance_matrix(pred_m, lib_m) #compute distances between all points
+    nn_num = E+1 #how many nearest neighbours to find
+
+
+    #Loop through each point in pred
+    for num in range(pred_m.shape[0]-t):
+
+        # Find nearest neighbours in library for each pred_m point
+        current_point = pred_m[num]
+        curr_dist = dist_mat[num]
+        nn_ind = sorted(range(len(curr_dist)), key=lambda k: curr_dist[k])[:nn_num] #return indeces of nearest neighbours in library
+
+        #Calculate weights for simplex projection - weights are calculated from nn distance at t0
+        nn = lib_m[nn_ind] #positions of nearest neighbours in library, to current point in pred at t0
+        nn_dist = dist_mat[num, nn_ind]  #distances of each nn to our pred point
+        w_mat = np.exp(-1*(nn_dist/np.min(nn_dist))) #matrix of weights for each nn 
+
+        # Where do nn end up at t + n
+        nn_ind_tp = np.array(nn_ind) + t #find indeces of neighbours in the future for simplex projection
+
+        #Deal with points that go off manifold at t - find next nearest neighbours 
+        if sum(nn_ind_tp >= lib_m.shape[0]) >0:                
+            #Replace neighbours that go off manifold at t with neighbours that dont, and recalculate weights
+            nn_ind_tp, w_mat = shift_nn(lib_m.shape[0], lib_m, dist_mat, np.array(nn_ind), nn_ind_tp, curr_dist, nn_num, num, t)
+
+        nn_tp = lib_m[nn_ind_tp] # locations of neighbours in future
+
+        #Simplex project - how much do the positions of neighbours relative to point of interest change over time 
+        #use weights from t 0
+        #use neighbour points from t + n
+        x_tp = pred_m[num][0] #Point I am trying to predict 
+        x_tp_pred = 0
+        for nn_i in range(w_mat.shape[0]): #Loop through each nn and sum over the weight*position at tp
+            x_tp_pred+= (w_mat[nn_i]/np.sum(w_mat))*nn_tp[nn_i]
+        x_tp_pred = x_tp_pred[0] #project back into 1d space
+
+        x_tp_m[num] = x_tp #true 
+        x_tp_pred_m[num+t] = x_tp_pred  #estimated - NB you are estimating the future value at t, not the original
+
+    return(x_tp_m, x_tp_pred_m)
+
+
+
+
+
