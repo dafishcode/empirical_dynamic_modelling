@@ -19,15 +19,15 @@ Simplex projection - https://www.nature.com/articles/344734a0
 ### Modules
 'admin_functions.py' - useful administrative functions 
 
-'LCE.py' - functions for performing lagged coordinate embedding
+'EDM.py' - functions for performing empirical dynamic modelling
 
-'CCM.py' - functions for implementing convergent cross mapping
+'CCM.py' - functions and classes for implementing convergent cross mapping
 
 'kedm_script.sh' - shell script for batch running kedm on salk system
 
 ### Notebooks
 
-'LCE.ipynb' - running and implementing LCE algorithm
+'LE.ipynb' - estimating the lyapunov exponent using lagged coordinate embedding on spontaneous and seizure time series. 
 
 'CCM_run.ipynb' - running and implementing CCM algorithm
 
