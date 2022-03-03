@@ -1,9 +1,9 @@
 # empirical_dynamic_modelling
-Repo for running empirical dynamic modelling techniques on data - using lagged coordinate embedding and convergent cross mapping (CCM), techniques which can account for non-linear dynamics to reconstruct attractors from time series data. 
+Repo for running empirical dynamic modelling techniques on data - using lagged coordinate embedding to perform simplex projection and convergent cross mapping (CCM) - techniques which can account for non-linear dynamics to reconstruct attractors from time series data. 
 
 See Sugihara et al. 
-https://www.science.org/doi/abs/10.1126/science.1227079
-
+CCM - https://www.science.org/doi/abs/10.1126/science.1227079
+Simplex projection - https://www.nature.com/articles/344734a0
 
 ## What is this repo for?
 * the implementation of lagged coordinate embedding on time series data
