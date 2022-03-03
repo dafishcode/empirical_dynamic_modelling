@@ -8,6 +8,7 @@ Simplex projection - https://www.nature.com/articles/344734a0
 
 ## What is this repo for?
 * the implementation of lagged coordinate embedding on time series data
+* the implementation of simplex projection
 * the implementation of convergent cross mapping (CCM) on time series data
 * the analysis and visualisation of CCM results 
 
