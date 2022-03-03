@@ -3,6 +3,7 @@ Repo for running empirical dynamic modelling techniques on data - using lagged c
 
 See Sugihara et al. 
 CCM - https://www.science.org/doi/abs/10.1126/science.1227079
+
 Simplex projection - https://www.nature.com/articles/344734a0
 
 ## What is this repo for?
