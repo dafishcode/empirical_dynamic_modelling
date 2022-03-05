@@ -1,12 +1,14 @@
 # empirical_dynamic_modelling
-Repo for running empirical dynamic modelling techniques on data - using lagged coordinate embedding and convergent cross mapping (CCM), techniques which can account for non-linear dynamics to reconstruct attractors from time series data. 
+Repo for running empirical dynamic modelling techniques on data - using lagged coordinate embedding to perform simplex projection and convergent cross mapping (CCM) - techniques which can account for non-linear dynamics to reconstruct attractors from time series data. 
 
 See Sugihara et al. 
-https://www.science.org/doi/abs/10.1126/science.1227079
+CCM - https://www.science.org/doi/abs/10.1126/science.1227079
 
+Simplex projection - https://www.nature.com/articles/344734a0
 
 ## What is this repo for?
 * the implementation of lagged coordinate embedding on time series data
+* the implementation of simplex projection
 * the implementation of convergent cross mapping (CCM) on time series data
 * the analysis and visualisation of CCM results 
 
@@ -17,15 +19,15 @@ https://www.science.org/doi/abs/10.1126/science.1227079
 ### Modules
 'admin_functions.py' - useful administrative functions 
 
-'LCE.py' - functions for performing lagged coordinate embedding
+'EDM.py' - functions for performing empirical dynamic modelling
 
-'CCM.py' - functions for implementing convergent cross mapping
+'CCM.py' - functions and classes for implementing convergent cross mapping
 
 'kedm_script.sh' - shell script for batch running kedm on salk system
 
 ### Notebooks
 
-'LCE.ipynb' - running and implementing LCE algorithm
+'LE.ipynb' - estimating the lyapunov exponent using lagged coordinate embedding on spontaneous and seizure time series. 
 
 'CCM_run.ipynb' - running and implementing CCM algorithm
 
