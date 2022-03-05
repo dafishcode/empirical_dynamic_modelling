@@ -1,5 +1,5 @@
 import admin_functions as adfn
-import LCE as lfn
+import EDM as efn
 #----------------------------------------------------------------------
 Fcode = '/nadata/mnlsc/home/dburrows/Documents/empirical_dynamic_modelling/'
 Fdata = '/nadata/mnlsc/home/dburrows/Documents/PTZ-WILDTYPE-CCM/'
