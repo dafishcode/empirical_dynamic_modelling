@@ -329,9 +329,9 @@ def save_shared_files(path, son_path, mode):
     Saves shared modules across different repositories
     
     Inputs:
-    path (string): name of parent path
-    son_path (string): name of code folder 
-    mode (string): define which file to save: 'admin', 'criticality', 'lce', or 'trace'
+    path (string): name of parent path - should be Fcode
+    son_path (string): name of code folder containing module which you have just edited
+    mode (string): define which module to save: 'admin', 'criticality', or 'trace'
     
     """
 
@@ -358,14 +358,10 @@ def save_shared_files(path, son_path, mode):
     if mode == 'criticality':
         file_list = [return_files(path , son_path, 'criticality.py')[0], return_files(path , son_path, 'IS.py')[0], return_files(path, son_path, 'trace_analyse.py')[0]]  #search for admin file in current directory
         path_list = ['criticality', 'avalanche_model', 'mutant_analysis'] #CHANGE AS NEEDED!
-
-    if mode == 'lce':
-        file_list = return_files(path , son_path, 'LCE.py' ) #search for LCE file in current directory
-        path_list = ['empirical_dynamic_modelling', 'seizure_dynamics'] #CHANGE AS NEEDED!
         
     if mode == 'trace':
         file_list = return_files(path , son_path, 'trace_analyse.py' ) #search for trace_analyse file in current directory
-        path_list = ['criticality', 'avalanche_model', 'plasticity_model', 'mutant_analysis'] #CHANGE AS NEEDED!
+        path_list = ['criticality', 'avalanche_model', 'mutant_analysis'] #CHANGE AS NEEDED!
         
         
     loop_dir(file_list, path_list) 
@@ -534,6 +530,26 @@ def timeprint(per, r, numrows, name):
 #MATHS
 #=============================
 #=============================
+
+#==============================================
+def autocorr(data, length):
+#==============================================
+    """
+    This function calculates the autocorrelation of a timeseries against itself over successive delays. 
+    
+    Inputs:
+        data (np array): 1d vector timeseries
+        length (int): how many delays to calculate over
+    
+    Returns:
+        1d vector of correlation values of data_t against data_ti
+    
+    """
+    import numpy as np
+        
+    return np.array([1]+[np.corrcoef(data[:-i], data[i:])[0,1]  \
+        for i in range(1, length)])
+    
 
 
 #=======================================================================================
