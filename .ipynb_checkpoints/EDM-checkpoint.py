@@ -115,9 +115,6 @@ def LE_embed(data, tau):
 
 
 
-
-
-
 #==============================================
 #PARAMETER ESTIMATION
 #==============================================
@@ -189,41 +186,6 @@ def MI(data, delay, n_bins):
                 MI += Phk * math.log( Phk / (P_bin[h] * P_bin[k]))
     return(MI)
 
-
-#==============================================    
-def find_tau(data, mode):
-#==============================================    
-    """
-    This function estimates tau for lagged coordinate embedding, using different approaches. mi = find the tau that provides the first minima of the MI - this provides most independent information to initial time series without completely losing the time series. ac = find the tau at which the autocorrelation drops below 1/e. 
-    
-    Inputs:
-        data (np array): 1d vector timeseries
-        mode (str): 'mi' or 'ac'
-    
-    Returns:
-        tau (int): estimated tau for embedding
-    
-    """
-    
-    if mode == 'mi':
-    
-        import numpy as np
-        from scipy.signal import argrelextrema
-
-        MI_list = []
-        for i in range(1,50):
-            MI_list = np.append(MI_list,[MI(data,i,50)])
-
-        tau = argrelextrema(MI_list, np.less)[0][0] + 1 #find the first minima of MI function
-        return(tau)
-    
-    if mode == 'ac':
-        import numpy as np
-        
-        auto = adfn.autocorr(data, 50)
-        tau = np.min(np.where(auto < 1/np.e)) #find the tau at which the autocorrelation drops below 1/e
-        return(tau)
-
     
 #==============================================    
 def FNN(data,tau,m, thresh):
@@ -243,23 +205,23 @@ def FNN(data,tau,m, thresh):
     """
     from sklearn.neighbors import NearestNeighbors 
     import numpy as np
+
+    embed_data_1 = takens_embed(m, tau, data)
+    embed_data_2 = takens_embed(m+1, tau, data)
+    embed_data_1 = embed_data_1[:embed_data_2.shape[0]] #Shorten embedded time series to match eachother
     
-    embed_data = takens_embed(m, tau, data)
-    
-    # find nearest neighbours 
-    nbrs = NearestNeighbors(n_neighbors=2, algorithm='auto').fit(embed_data)
-    distances, indices = nbrs.kneighbors(embed_data)
-    
+    #Find nearest neighbors
+    nbrs = NearestNeighbors(n_neighbors=2, algorithm='auto').fit(embed_data_1)
+    distances, indices = nbrs.kneighbors(embed_data_1)
+
     #two data points are nearest neighbours if their distance is smaller than the standard deviation
     sigma = np.std(distances.flatten())
-    
+
     n_false_NN = 0
     
-    
-    for i in range(0, len(data)-tau*(m+1)):
-        
-        #if distance between points is nonzero, less than the std AND distance between nn in next dimension / previous dimension > threshold = nn is false
-        if (0 < distances[i,1]) and (distances[i,1] < sigma) and ( (abs(data[i+m*tau] - data[indices[i,1]+m*tau]) / distances[i,1]) > thresh):
+    #if distance between points is nonzero, less than the std AND distance between nn in next dimension / previous dimension > threshold = nn is false
+    for i in range(embed_data_2.shape[0]):
+        if (0 < distances[i,1]) and (distances[i,1] < sigma) and (np.linalg.norm(embed_data_2[i] - embed_data_2[indices[i][1]])/distances[i][1]) > thresh:
             n_false_NN  += 1;
     return n_false_NN 
 
@@ -285,12 +247,14 @@ def simplex_project(data, E, tau, t):
         
     
     Returns:
+        corr (float): correlation coefficient between observed and predicted
         x_tp_m (np array): a vector of observations
         x_tp_pred_m (np array): a vector of predictions
         
     """
     from scipy import spatial
     import numpy as np
+    import pandas as pd
     
     
     #==========================================
@@ -378,12 +342,100 @@ def simplex_project(data, E, tau, t):
 
         x_tp_m[num] = x_tp #true 
         x_tp_pred_m[num+t] = x_tp_pred  #estimated - NB you are estimating the future value at t, not the original
+        
 
-    return(x_tp_m, x_tp_pred_m)
+    my = {'Obs': x_tp_m, 'Pred': x_tp_pred_m}
+    my_df = pd.DataFrame(data=my) 
+    corr = my_df.corr()['Obs']['Pred']
+        
+        
+    return(corr, [x_tp_m, x_tp_pred_m])
 
 
+#==============================================    
+def find_tau(data, mode):
+#==============================================    
+    """
+    This function estimates tau for lagged coordinate embedding, using different approaches. mi = find the tau that provides the first minima of the MI - this provides most independent information to initial time series without completely losing the time series. ac = find the tau at which the autocorrelation drops below 1/e. 
+    
+    Inputs:
+        data (np array): 1d vector timeseries
+        mode (str): 'mi' or 'ac'
+    
+    Returns:
+        tau (int): estimated tau for embedding
+    
+    """
+    
+    if mode == 'mi':
+    
+        import numpy as np
+        from scipy.signal import argrelextrema
+
+        MI_list = []
+        for i in range(1,50):
+            MI_list = np.append(MI_list,[MI(data,i,50)])
+
+        tau = argrelextrema(MI_list, np.less)[0][0] + 1 #find the first minima of MI function
+        return(tau)
+    
+    if mode == 'ac':
+        import numpy as np
+        
+        auto = adfn.autocorr(data, 50)
+        tau = np.min(np.where(auto < 1/np.e)) #find the tau at which the autocorrelation drops below 1/e
+        return(tau)
 
 
+#==============================================    
+def find_E(data, tau, mode):
+#==============================================    
+    """
+    This function estimates the embedding dimension E for lagged coordinate embedding, using different approaches. 
+    fnn = find the E that approaches 0 false nearest neighbours - what embedding unfolds the manifold so that nearest neighbours become preserved.
+    simplex = runs simplex projection over a range of E values with a given tau, and returns the E with greatest correlation between the real variable and predicted. 
+    
+    Inputs:
+        data (np array): 1d vector timeseries
+        tau (int): delay for embedding
+        mode (str): 'fnn' or 'simplex'
+    
+    Returns:
+        E (int): estimated number of dimensions to use for embedding
+    
+    """
+    
+    if mode == 'fnn':
+        import numpy as np
+        from scipy.signal import argrelextrema
+
+        nFNN = []
+        for i in range(1,15):
+            nFNN.append(FNN(data,tau,i, 10) / len(data))
+
+        E = np.min(np.where(np.array(nFNN) ==0 )) + 1
+        return(E)
+    
+    if mode == 'simplex':
+        import numpy as np
+        
+        E_range = 20 
+        t = 1 
+        
+        corr_l = [0]*E_range
+        for E in range(1, E_range+1):
+            corr_l[E-1] = simplex_project(data, E, tau, t)[0]
+            print('Done E = ' + str(E))
+
+        E_max = np.where(corr_l == np.max(corr_l))[0][0] + 1
+        return(E_max)
+
+
+    
+    
+#==============================================
+#Cross mapping
+#==============================================
 
 
 
