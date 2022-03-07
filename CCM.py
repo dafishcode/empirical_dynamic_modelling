@@ -5,7 +5,9 @@ Fcode = '/nadata/mnlsc/home/dburrows/Documents/empirical_dynamic_modelling/'
 Fdata = '/nadata/mnlsc/home/dburrows/Documents/PTZ-WILDTYPE-CCM/'
 
 
-
+#==============================================
+#PREPROCESS
+#==============================================
 #=================================
 def CCM_sort(co, tr, dff, name):
 #=================================
@@ -69,8 +71,6 @@ def CCM_sort(co, tr, dff, name):
         return()
     
 
-
-
 #=====================================
 def kspace_meantrace(coord, trace, k):
 #=====================================
@@ -131,3 +131,187 @@ def E_ccm_heatmap(E, ccm, n_bins):
     return(hist)
 
 
+
+
+#==============================================
+#RUN CCM
+#==============================================
+
+#================================    
+class CCM: 
+#================================    
+    """
+    This class runs convergent cross mapping on time series data and estimates parameters using techniques 
+    from empirical dynamic modelling - e.g. simplex projection and lagged coordinate embedding. 
+    
+    Inputs:
+        data_cause (np array): Data to perform CCM on - this should be the causative variable. 
+        data_effect (np array): Data to perform CCM on - this should be the effected variable. NB can leave empty if only doing analyses for one dataset. 
+    
+    """
+    
+    #========================
+    def __init__(self, data_cause, data_effect):
+    #========================
+        self.data_cause = data_cause 
+        self.data_effect = data_effect
+
+    #========================
+    def est_tau(self, data, mode):
+    #========================
+        """
+        This function estimates tau for lagged coordinate embedding, using different approaches. mi = find the tau that provides the first minima of the MI - this provides most independent information to initial time series without completely losing the time series. ac = find the tau at which the autocorrelation drops below 1/e. 
+
+        Inputs:
+            data (np array): 1d vector timeseries
+            mode (str): 'mi' or 'ac'
+
+        Returns:
+            tau (int): estimated tau for embedding
+
+        """
+        self.tau = efn.find_tau(data, mode) #Estimate tau
+        
+        return(self)
+        
+        
+    #========================
+    def est_E(self, data, tau_mode, E_mode, tau_default):
+    #========================
+        """
+        This function estimates the embedding dimension E for lagged coordinate embedding, using different approaches. 
+        fnn = find the E that approaches 0 false nearest neighbours - what embedding unfolds the manifold so that nearest neighbours become preserved.
+        simplex = runs simplex projection over a range of E values with a given tau, and returns the E with greatest correlation between the real variable and predicted. 
+
+        Inputs:
+            data (np array): 1d vector timeseries
+            tau_mode (str): 'mi' or 'acc'
+            E_mode (str): 'fnn' or 'simplex'
+            'tau_default': 'yes' - means tau is set to one
+
+        Returns:
+            E (int): estimated number of dimensions to use for embedding
+
+        """
+
+        self.tau = self.est_tau(data, tau_mode).tau #Estimate tau
+        self.E = efn.find_E(data, self.tau, E_mode) #Estimate E
+    
+        #in my fish calcium imaging data tau is set to 1
+        if tau_default == 'yes':
+            self.tau = 1 
+            
+        return(self)
+        
+    #==================================================
+    def simplex(self, data, tau_mode, E_mode, tau_default):
+    #==================================================
+    
+        """
+        This function performs simplex projection over t time steps into the future.
+
+        Inputs:
+            data (np array): 1d vector timeseries
+            tau_mode (str): 'mi' or 'acc'
+            E_mode (str): 'fnn' or 'simplex'
+            'tau_default': 'yes' - means tau is set to one
+
+
+        Returns:
+            simp_corr (float): correlation coefficient between observed and predicted
+            simp_pred (np array): a 2d vector of observations and predictions
+
+        """
+    
+        self.tau = self.est_tau(data, tau_mode).tau #Estimate tau
+        self.E = self.est_E(data, tau_mode, E_mode, tau_default).E #Estimate E
+        self.simp_corr, self.simp_pred = efn.simplex_project(data, self.E, self.tau, 1) #Perform simplex projection
+    
+        return(self)
+        
+    #=====================================================
+    def group_embed(self, tau_mode, E_mode, tau_default):
+    #=====================================================
+        """
+        This function performs embedding on our 2 cause and effect variables. 
+
+        Inputs:
+            tau_mode (str): 'mi' or 'acc'
+            E_mode (str): 'fnn' or 'simplex'
+            'tau_default': 'yes' - means tau is set to one
+
+
+        Returns:
+            lib_m (np array): t x E embedded time series, used to make the prediction.
+            pred_m (np array): t x E embedded time series, used as the observed dataset to compare with prediction. 
+        
+
+        """
+        #Initialise cause and effect dictionaries
+        self.cause = {'data': self.data_cause, 'E': self.est_E(self.data_cause, tau_mode, E_mode, tau_default).E, 'tau': self.est_tau(self.data_cause, tau_mode).tau } #variable being tested as causative factor - ie pred manifold
+        self.effect = {'data': self.data_effect, 'E': self.est_E(self.data_effect, tau_mode, E_mode, tau_default).E , 'tau': self.est_tau(self.data_effect, tau_mode).tau} #variable being tested as the effected variables - ie lib manifold
+        
+        #Embed each timeseries with respective parameters
+        lib, lib_E, lib_tau = self.effect['data'], self.effect['E'], self.effect['tau'] # This is the variable that will be used to predict -  the effected variable.
+        pred, pred_E, pred_tau = self.cause['data'], self.cause['E'], self.cause['tau'] # This is the variable that will be predicted - the causative variable. 
+        self.embed_m = efn.takens_embed(lib_E, lib_tau, lib),efn.takens_embed(pred_E, pred_tau, pred) #lib then pred
+    
+        return(self)
+    
+    #=================================================
+    def cross_map(self, tau_mode, E_mode, tau_default):
+    #=================================================
+        """
+        This function performs cross map predictions from one manifold to another. This function will use the effected variable manifold
+        to predict the causative variable manifold. 
+
+        Inputs:
+            tau_mode (str): 'mi' or 'acc'
+            E_mode (str): 'fnn' or 'simplex'
+            'tau_default': 'yes' - means tau is set to one
+
+
+        Returns:
+            true_pred_m (np array): t x E embedded time series, used as the observed dataset to compare with prediction - the causative variable manifold.
+            est_pred_m (np array): t x E embedded time series, the predicted manifold - the causative variable manifold prediction. 
+
+        """
+    
+        #Initialise embedded variables
+        self.lib_m, self.pred_m = self.group_embed(tau_mode, E_mode, tau_default).embed_m 
+        
+        #Do crossmap estimate - use lib manifold to reconstruct and predict pred manifold 
+        self.true_pred_m, self.est_pred_m = efn.crossmap(lib_m, pred_m)
+
+        return(self)
+        
+    #========================
+    def conv_cross_map(self, tau_mode, E_mode, tau_default, l_range):
+    #========================
+    
+        """
+        This function performs convergent cross mapping between two manifolds: a causative variable (prediction manifold) - one we are testing 
+        to see if it causes the other; an effected variable (library manifold) - one we are testing to see if it is caused by the other. CCM 
+        is performed over a range of library sizes to check for convergence - the property that if the supposed causative variable actually causes
+        the supposed effected variable the correlation between CCM predictions and observed manifold values should increase as more points are 
+        added. 
+
+        Inputs:
+            tau_mode (str): 'mi' or 'acc'
+            E_mode (str): 'fnn' or 'simplex'
+            'tau_default': 'yes' - means tau is set to one
+
+
+        Returns:
+            ccm_corr_l (list): list containing CCM correlation values as you increase library 
+            ccm_true_l (list): list containing observed prediction manifold as you increase library 
+            ccm_pred_l (list): list containing predicted prediction manifold as you increase library 
+        """
+        #Initialise embedded variables
+        lib_m, pred_m = self.group_embed(tau_mode, E_mode, tau_default).embed_m
+        
+        #Do CCM
+        self.ccm_corr_l, self.ccm_true_l, self.ccm_pred_l = efn.CCM_range(l_range, self.cause, self.effect)
+        
+        return(self)
+    
