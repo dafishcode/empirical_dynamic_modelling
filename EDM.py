@@ -351,7 +351,6 @@ def simplex_project(data, E, tau, t):
         
     return(corr, [x_tp_m, x_tp_pred_m])
 
-
 #==============================================    
 def find_tau(data, mode):
 #==============================================    
@@ -437,27 +436,31 @@ def find_E(data, tau, mode):
 #Cross mapping
 #==============================================
 
-
-
-#CONVERGENT CROSS MAP ESTIMATE
-
-def CCM(l_range, lib_m, pred_m):
-    import random
-    import scipy
-
-    true_l, pred_l = [0]*len(l_range), [0]*len(l_range)
-    corr_l = [0]*len(l_range)
-
-    #Cross map as you fi
-    for e,l in enumerate(l_range):
-        t_l = random.sample(range(lib_m.shape[0]),l) #Randomly sample
-        lib_m_sub, pred_m_sub = lib_m[t_l], pred_m[t_l]
-        true, pred = crossmap(lib_m_sub, pred_m_sub) #Run cross map
-        true_l[e], pred_l[e] = true,pred
-        corr_l[e] = scipy.stats.pearsonr(true, pred)[0]
-    return(corr_l, true_l, pred_l)
-
+#====================================
 def crossmap(lib_m, pred_m):
+#====================================
+   
+    """
+    This function performs cross map predictions from one manifold to another. Briefly, the algorithm takes two different manifold and uses on to predict
+    the other - if manifold Y can accurately predict manifold X, then Y contains information about X within it and thus X must cause Y. For each point in 
+    manifold X, we find the nearest neighbours to that point and then locate the same nearest neighbours (labelled by their time indeces) on manifold Y. We 
+    then use the locations of nn in Y and the distances between point of interest p on X and its nearest neighbours in X, to predict where point p ends up in Y. 
+    The prediction will be accurate if the local structure of the manifold is converved across manifold X and Y - i.e. nearest neighbours to p on X are also nearest
+    neighbours to p on Y. 
+    
+    
+    Inputs:
+        lib_m (np array): t x E embedded time series, used to make the prediction.
+        pred_m (np array): t x E embedded time series, used as the observed dataset to compare with prediction. 
+        
+    
+    Returns:
+        x_m (np array): t x E embedded time series, used as the observed dataset to compare with prediction.
+        x_pred_m (np array): t x E embedded time series, the predicted manifold. 
+        
+    """
+    import numpy as np
+    from scipy import spatial
     
     x_m = np.zeros(pred_m.shape[0]) #Matrix to enter values you are trying to predict
     x_pred_m = np.zeros(pred_m.shape[0]) #Matrix to values you have predicted
@@ -465,7 +468,7 @@ def crossmap(lib_m, pred_m):
 
     #find the E+1 nearest neighbours in library
     dist_mat = spatial.distance_matrix(lib_m, lib_m) #compute distances between all points against themselves
-    nn_num = E+1 #how many nearest neighbours to find
+    nn_num = lib_m.shape[1]+1 #how many nearest neighbours to find
     
     #Loop through each time step in lib
     for t in range(lib_m.shape[0]):
@@ -497,9 +500,56 @@ def crossmap(lib_m, pred_m):
         x_pred_m[t] = x_pred
         
     return(x_m, x_pred_m)
+
+
+#==============================================
+def CCM(l_range, cause, effect):
+#==============================================
     
+    """
+    This function performs convergent cross mapping between two manifolds: a causative variable (prediction manifold) - one we are testing 
+    to see if it causes the other; an effected variable (library manifold) - one we are testing to see if it is caused by the other. CCM 
+    is performed over a range of library sizes to check for convergence - the property that if the supposed causative variable actually causes
+    the supposed effected variable the correlation between CCM predictions and observed manifold values should increase as more points are 
+    added. 
+    
+    Inputs:
+        l_range (np array): 1d vector of library sizes to test CCM
+        cause (dict): dictionary for the causative variable, containing the data and parameters
+        effect (dict): dictionary for the effected variable, containing the data and parameters
+    
+    Returns:
+        corr_l (list): list containing CCM correlation values as you increase library 
+        true_l (list): list containing observed prediction manifold as you increase library 
+        pred_l (list): list containing predicted prediction manifold as you increase library 
+    
+    """    
 
+    import random
+    from scipy import stats
+    import numpy as np
+    
+    lib, lib_E, lib_tau = effect['data'], effect['E'], effect['tau'] # This is the variable that will be used to predict -  the effected variable.
+    pred, pred_E, pred_tau = cause['data'], cause['E'], cause['tau'] # This is the variable that will be predicted - the causative variable. 
 
+    #Embed data
+    lib_m = takens_embed(lib_E, lib_tau, lib) 
+    pred_m = takens_embed(pred_E, pred_tau, pred) 
+
+    #Initialise data output structures
+    true_l, pred_l = [0]*len(l_range), [0]*len(l_range)
+    corr_l = [0]*len(l_range)
+
+    smallest = np.min([lib_m.shape[0], pred_m.shape[0]]) #find smallest array - may be different sizes if tau and E are different
+    
+    #Cross map as you increase library size
+    for e,l in enumerate(l_range):
+        t_l = random.sample(range(smallest),l) #Randomly sample
+        lib_m_sub, pred_m_sub = lib_m[t_l], pred_m[t_l]
+        true, pred = crossmap(lib_m_sub, pred_m_sub) #Run cross map on subsampled data
+        true_l[e], pred_l[e] = true,pred
+        corr_l[e] = stats.pearsonr(true, pred)[0]
+    return(corr_l, true_l, pred_l)
 
 
 
