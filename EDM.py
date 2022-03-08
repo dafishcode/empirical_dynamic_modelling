@@ -424,7 +424,7 @@ def find_E(data, tau, mode):
         corr_l = [0]*E_range
         for E in range(1, E_range+1):
             corr_l[E-1] = simplex_project(data, E, tau, t)[0]
-            print('Done E = ' + str(E))
+            #print('Done E = ' + str(E))
 
         E_max = np.where(corr_l == np.max(corr_l))[0][0] + 1
         return(E_max)
@@ -461,6 +461,11 @@ def crossmap(lib_m, pred_m):
     """
     import numpy as np
     from scipy import spatial
+    
+    #make sure each manifold is the same length
+    mini = np.min([pred_m.shape[0], lib_m.shape[0]])
+    pred_m = pred_m[:mini,:]
+    lib_m = lib_m[:mini,:]
     
     x_m = np.zeros(pred_m.shape[0]) #Matrix to enter values you are trying to predict
     x_pred_m = np.zeros(pred_m.shape[0]) #Matrix to values you have predicted
@@ -503,7 +508,7 @@ def crossmap(lib_m, pred_m):
 
 
 #==============================================
-def CCM(l_range, cause, effect):
+def CCM_range(l_range, cause, effect):
 #==============================================
     
     """
