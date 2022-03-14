@@ -31,6 +31,8 @@ Simplex projection - https://www.nature.com/articles/344734a0
 
 'CCM_run.ipynb' - running and implementing CCM algorithm
 
+'CCM_process.ipynb' - preprocessing activity data for running CCM using kEDM
+
 'CCM_ptz_anat.ipynb' - applying CCM to whole brain single cell PTZ-seizure data to understand role of brain anatomy in driving seizures
 
 'CCM_ptz_nonlinear.ipynb' - applying CCM to whole brain single cell PTZ-seizure data to understand role of non-linear dynamics in driving seizures
