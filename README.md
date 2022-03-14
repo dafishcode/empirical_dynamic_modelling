@@ -1,5 +1,5 @@
 # empirical_dynamic_modelling
-Repo for running empirical dynamic modelling techniques on data - using lagged coordinate embedding to perform simplex projection and convergent cross mapping (CCM) - techniques which can account for non-linear dynamics to reconstruct attractors from time series data. 
+Repo for running empirical dynamic modelling techniques on data, using lagged coordinate embedding to perform simplex projection and convergent cross mapping (CCM) - techniques which can account for non-linear dynamics to reconstruct attractors from time series data. 
 
 See Sugihara et al. 
 CCM - https://www.science.org/doi/abs/10.1126/science.1227079
@@ -31,8 +31,13 @@ Simplex projection - https://www.nature.com/articles/344734a0
 
 'CCM_run.ipynb' - running and implementing CCM algorithm
 
-'CCM_eval.ipynb' - evaluating and analysing CCM results
+'CCM_process.ipynb' - preprocessing activity data for running CCM using kEDM
 
+'CCM_ptz_anat.ipynb' - applying CCM to whole brain single cell PTZ-seizure data to understand role of brain anatomy in driving seizures
+
+'CCM_ptz_nonlinear.ipynb' - applying CCM to whole brain single cell PTZ-seizure data to understand role of non-linear dynamics in driving seizures
+
+'CCM_ptz_predict.ipynb' - applying CCM to whole brain single cell PTZ-seizure data to predict seizures 
 
 
 
