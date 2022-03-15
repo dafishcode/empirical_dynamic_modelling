@@ -9,11 +9,13 @@ Fdata = '/nadata/mnlsc/home/dburrows/Documents/PTZ-WILDTYPE-CCM/'
 #PREPROCESS
 #==============================================
 #=================================
-def CCM_sort(co, tr, dff, name):
+def CCM_seizure_sort(co, tr, dff, name):
 #=================================
 
     """
-    This function sorts all trace and coord data into dictionary for CCM and 2d arrays as hdf5 files
+    This function sorts all trace and coord data into dictionary for CCM and 2d arrays as hdf5 files, while also adding in a meantrace to the top of the array. 
+    NB - kEDM wants data structured as: time x cells
+    CCM_sort function adds in a meantrace and saves traces as: cells x time in .npy dict, but time x cells in .h5 
 
     Inputs:
         co (np array): cells x XYZ coordinates and labels
@@ -70,6 +72,99 @@ def CCM_sort(co, tr, dff, name):
         print("data wrong shape")
         return()
     
+    
+    
+#=================================
+def CCM_trace_save(data, name):
+#=================================
+
+    """
+    This function sorts all trace and coord data into dictionary for CCM and 2d arrays as hdf5 files, while also adding in a meantrace to the top of the array. 
+    NB - kEDM wants data structured as: time x cells
+    CCM_trace_save function renames and saves trace data as: time x cells, and 
+    then saves the trace in the correct orientation in h5 format
+    
+    Inputs:
+        data (str): file name of dataset - should be cells x timepoints, raw fluorescence values
+        name (str): fish name for saving - should include datatype after run        
+    
+    
+    """
+    import numpy as np
+    import h5py
+
+    #rename for kEDM processing
+    os.rename(data, name + '_pre-CCM.npy')
+
+    def np2h5(full_name, array):
+        #Convert numpy array to hdf5 file
+        f = h5py.File(full_name, 'w')
+        f.create_dataset("data", data = array)
+        f.close()
+
+    #save as .h5
+    array = np.load(name + '_pre-CCM.npy').T
+    full_name = name + '_pre-CCM.h5' 
+    np2h5(full_name, array)
+
+
+    
+#=================================
+def ccm_stats(file, mode):
+#=================================
+
+    """
+    This function takes as input a filename and returns a vector of ccm statistics corresponding to each neuron.
+
+    Inputs:
+        file (str): filename - should be a '-CCMxmap.h5' file
+        mode (str): what data type you want:
+                        'c_to_sz' = cells that drive the seizure
+                        'sz_to_c' = cells that are driven by the seizure
+                        'e' = embedding dimension of each cell
+                        'rd_cause' = non-linear causing neurons - mean rhodiff of neurons that are caused by neuron of interest
+                        'rd_int' =  #non-linear integration - mean rhodiff of neurons that cause neuron of interest
+                        
+    Returns:
+            (np array): 1d vector of interest (length = n cells) containing ccm stats
+    
+    
+    """      
+    
+    import h5py
+    import numpy as np
+    data = h5py.File(file)
+    
+    if mode != 'c_to_sz' and mode != 'sz_to_c' and mode != 'e' and mode != 'rd_cause' and mode != 'rd_int':
+        print('Mode name does not match options')
+        return()
+    
+    if mode == 'c_to_sz':
+        ccm = np.array(data['ccm']) 
+        c_to_sz = ccm[1:,0] #cells that drive the seizure
+        return(c_to_sz)
+        
+    if mode == 'sz_to_c':
+        ccm = np.array(data['ccm']) 
+        sz_to_c = ccm[0,1:] #cells that are driven by the seizure
+        return(sz_to_c)
+        
+    if mode == 'e':
+        e = np.array(data['e']) [1:] #embedding dimension for each neuron
+        return(e)
+        
+    else:
+        rd_m = data['rhodiff'][1:,1:] #remove seizure values
+        np.fill_diagonal(rd_m,0) #remove self-ccm values 
+        
+        if mode == 'rd_cause':
+            rd_cause = np.apply_along_axis(np.mean,1,rd_m) #non-linear causing - mean rhodiff of neurons that are caused by neuron of interest
+            return(rd_cause)
+            
+        if mode == 'rd_int':
+            rd_int = np.apply_along_axis(np.mean,0,rd_m) #non-linear integration - mean rhodiff of neurons that cause neuron of interest
+            return(rd_int)
+        
 
 #=====================================
 def kspace_meantrace(coord, trace, k):
@@ -101,8 +196,6 @@ def kspace_meantrace(coord, trace, k):
     
     return(k_coord, k_trace)
     
-
-
 
 #===========================
 def E_ccm_heatmap(E, ccm, n_bins):
