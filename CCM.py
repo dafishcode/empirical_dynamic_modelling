@@ -6,7 +6,7 @@ Fdata = '/nadata/mnlsc/home/dburrows/Documents/PTZ-WILDTYPE-CCM/'
 
 
 #==============================================
-#PREPROCESS
+#PROCESS
 #==============================================
 #=================================
 def CCM_seizure_sort(co, tr, dff, name):
@@ -164,7 +164,175 @@ def ccm_stats(file, mode):
         if mode == 'rd_int':
             rd_int = np.apply_along_axis(np.mean,0,rd_m) #non-linear integration - mean rhodiff of neurons that cause neuron of interest
             return(rd_int)
+    
+
+    
+#=========================================
+def ccm_cellstack(data_l, coord_l, mode):
+#=========================================
+
+    """
+    This function groups CCM statistics for each neuron with their regional brain labels and returns it as a dictionary. 
+
+    Inputs:
+        data_l (list): list of XMAP files
+        coord_l (list): list of pre-CCM numpy files containing coordinates data
+        mode (str): what data type you want:
+                        'c_to_sz' = cells that drive the seizure
+                        'sz_to_c' = cells that are driven by the seizure
+                        'e' = embedding dimension of each cell
+                        'rd_cause' = non-linear causing neurons - mean rhodiff of neurons that are caused by neuron of interest
+                        'rd_int' =  #non-linear integration - mean rhodiff of neurons that cause neuron of interest
+    
+    Returns:
+        data_comb (np array): a vector of CCM stats combined together across all fish
+        coord_comb (np array): a matrix of xyz cell coordinates and labels, combined together across all fish
         
+    """      
+    
+    import numpy as np
+
+
+    data_comb, coord_comb = ccm_stats(data_l[0], mode),np.load(coord_l[0], allow_pickle=True).item()['coord']
+
+    for i in range(1,len(data_l)):
+        data = ccm_stats(data_l[i], mode)
+        coord = np.load(coord_l[i], allow_pickle=True).item()['coord']
+
+        if data.shape[0] != coord.shape[0]:
+            print('Data shape does not match at' + str(data_l[i]) + ' and ' + str(coord_l[i]) )
+            return()
+
+        data_comb = np.append(data_comb, data)
+        coord_comb = np.row_stack((coord_comb, coord))
+    return(data_comb, coord_comb)
+
+    
+#=================================
+def ccm_region(data, coord, mode):
+#=================================
+
+    """
+    This function groups CCM statistics for each neuron with their regional brain labels and returns it as a dictionary. 
+
+    Inputs:
+        data (np array): vector of CCM statistics ordered by cell
+        coord (np array): cells x XYZ coordinates and all labels
+        mode (str): which labelling type to use: 
+            'coarse' = 5 major brain distinctions
+            'gran' = subregional brain distinctions
+    
+    Returns:
+        df (dict): dictionary containing ccm data, coordinates and labels together.
+        lab (np array): a vector of labels whose order corresponds to the numbers in the dictionary
+        
+    """      
+    
+    import numpy as np
+    import pandas as pd
+    
+    if data.shape[0] != coord.shape[0]:
+        print('Data shape does not match')
+        return()
+    
+    if mode != 'coarse' and mode != 'gran':
+        print('Choose correct region grouping')
+        return()
+
+
+    #Choose granularity of cell labelling
+    if mode == 'coarse':
+        curr_coord = coord[:,4] #coord labels - coarse 
+
+    if mode == 'gran':
+        curr_coord = coord[:,3] #coord labels - granular
+
+
+    lab_coord = np.column_stack((coord[:,:3].astype(float).astype(np.object),curr_coord)) #Combine coordinates + labels 
+    num_v = np.zeros(curr_coord.shape[0]) #empty vector to fill in with number labels
+    lab = np.unique(curr_coord) #unique labels ordered
+    for i in range(lab.shape[0]): num_v[curr_coord == lab[i]] = i #loop through each label and number by lab vector
+    num_v = num_v.astype(int)
+
+    df = pd.DataFrame(np.column_stack((data.astype(np.object), np.column_stack((lab_coord, num_v.astype(np.object))))), columns = ['data', 'x', 'y', 'z', 'label', 'num'])
+    return(df, lab)
+
+
+#=======================================================================================
+def ccm_fdr(df_1, df_2, alpha, mode):
+#=======================================================================================
+    """
+    This function performs false discovery rate calculation to return significantly different comparisons.
+    
+    Inputs:
+    df_1 (dict): dictionary containing ccm dataset 1, coordinates and labels together.
+    df_2 (dict): dictionary containing ccm dataset 2, coordinates and labels together.
+    alpha (float): significance level
+    mode (str): 'indep' for independent samples, 'negcorr' for related samples
+
+    Outputs:
+    sig_v (np array): boolean vector - true = significant difference
+    adj_p_vals (np array): vector of adjusted p values - anything less than alpha will be significant
+    lab (np array): a vector of labels whose order corresponds to the sig_v vector
+
+    """
+
+    import numpy as np
+    import pandas as pd
+    import mne
+
+    lab = np.intersect1d(np.unique(np.array(df_1['label'])),np.unique(np.array(df_2['label']))) #Find shared labels
+    p_vals = np.zeros((len(lab)))
+
+    for x,l in enumerate(lab): #loop through each label
+        data_1 = np.array(df_1['data'][df_1['label'] == l]) #grab data from dict 1 for given region - this should be your baseline
+        data_2 = np.array(df_2['data'][df_2['label'] == l]) #grab data from dict 2 for given region - this should be alt. condition
+        if len(data_1) < 8 or len(data_2) < 8:
+            p_vals[x] = 1 #set to non-significant if not enough values
+
+        else:
+            U,p_vals[x] = adfn.stats_2samp(data_1, data_2, 0.05, 1, 'ind' )#Calculate p value
+
+    sig_v, adj_p_vals = mne.stats.fdr_correction(p_vals, 0.05, mode) #Use Benjamini hochberg FDR test 
+
+    return(sig_v, adj_p_vals, lab)
+
+
+
+
+#=================================
+def ccm_diff_dict(df_1, df_2):
+#=================================
+
+    """
+    This function calculates differences in CCM statistics by brain region and returns it as a dict. 
+    Positive differences indicate an increase compared to baseline. 
+
+    Inputs:
+    df_1 (dict): dictionary containing ccm dataset 1, coordinates and labels together - baseline dataset.
+    df_2 (dict): dictionary containing ccm dataset 2, coordinates and labels together - alternative condition dataset.
+
+    Outputs:
+    df (dict): dictionary containing mean difference ccm data by region.
+
+    """
+    
+    import numpy as np
+    import pandas as pd
+
+    lab = np.intersect1d(np.unique(np.array(df_1['label'])),np.unique(np.array(df_2['label']))) #Find shared labels
+    diff_v = np.zeros((len(lab))) #initialise vector of differences for each region
+
+    for x,l in enumerate(lab): #loop through each label
+        data_1 = np.array(df_1['data'][df_1['label'] == l]) #grab data from dict 1 for given region - this should be your baseline
+        data_2 = np.array(df_2['data'][df_2['label'] == l]) #grab data from dict 2 for given region - this should be alt. condition
+        diff_v[x] = np.mean(data_2) - np.mean(data_1) #positive values mean an increase from baseline
+
+    d = {'data': diff_v, 'label': lab, 'num': np.arange(0, len(lab), 1)}
+    df = pd.DataFrame(data=d)
+    
+    return(df)
+
 
 #=====================================
 def kspace_meantrace(coord, trace, k):

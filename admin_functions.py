@@ -601,9 +601,12 @@ def stats_2samp(data1, data2, alpha, n_comp, mode):
     data1 (np array/list/dataframe): row of dataset 1
     data2 (np array/list/dataframe): row of dataset 2
     alpha (float): significant level
-    n_comp (int): number of comparisons
+    n_comp (int): number of comparisons for bonferroni correction
     mode (str): 'ind' for independent samples, 'rel' for related samples
 
+    Outputs:
+     (float): test statistic
+    p (float): p value
     """
 
     from scipy import stats
@@ -624,11 +627,14 @@ def stats_2samp(data1, data2, alpha, n_comp, mode):
             U, p = stats.mannwhitneyu(data1, data2)
             print_sig(U,p,corrected_alpha)
             print('U = ' + str(U) +  '   p = ' + str(p))
+            return(U,p)
             
         elif mode == 'rel':
             w, p = stats.wilcoxon(data1, data2)
             print_sig(w,p,corrected_alpha)
             print('w = ' + str(w) +  '   p = ' + str(p))
+            return(w,p)
+        
             
     else:
         print('Both samples are Gaussian - performing parametric test')
@@ -642,6 +648,8 @@ def stats_2samp(data1, data2, alpha, n_comp, mode):
             print_sig(t,p,corrected_alpha)
             
         print('t = ' + str(t) +  '   p = ' + str(p))
+        return(t,p)
+
 
 #=======================================================================
 def mean_distribution(distlist): #Generate mean distribution 
