@@ -263,6 +263,7 @@ def ccm_fdr(df_1, df_2, alpha, mode):
 #=======================================================================================
     """
     This function performs false discovery rate calculation to return significantly different comparisons.
+    NB this function removes data from both dictionaries that do not have enough cells for statisical comparison.
     
     Inputs:
     df_1 (dict): dictionary containing ccm dataset 1, coordinates and labels together.
@@ -282,20 +283,23 @@ def ccm_fdr(df_1, df_2, alpha, mode):
     import mne
 
     lab = np.intersect1d(np.unique(np.array(df_1['label'])),np.unique(np.array(df_2['label']))) #Find shared labels
-    p_vals = np.zeros((len(lab)))
+    p_vals = [] #add in p values from comparisons with enough data points
+    sub_lab = [] #new list which will have only labels with enough comparisons
+
 
     for x,l in enumerate(lab): #loop through each label
         data_1 = np.array(df_1['data'][df_1['label'] == l]) #grab data from dict 1 for given region - this should be your baseline
         data_2 = np.array(df_2['data'][df_2['label'] == l]) #grab data from dict 2 for given region - this should be alt. condition
         if len(data_1) < 8 or len(data_2) < 8:
-            p_vals[x] = 1 #set to non-significant if not enough values
-
+            continue # dont add in data without enough cells for comparison
+            
         else:
-            U,p_vals[x] = adfn.stats_2samp(data_1, data_2, 0.05, 1, 'ind' )#Calculate p value
+            p_vals = np.append(p_vals,adfn.stats_2samp(data_1, data_2, 0.05, 1, 'ind' )[1]) #Calculate p value
+            sub_lab = np.append(sub_lab, l) 
 
     sig_v, adj_p_vals = mne.stats.fdr_correction(p_vals, 0.05, mode) #Use Benjamini hochberg FDR test 
 
-    return(sig_v, adj_p_vals, lab)
+    return(sig_v, adj_p_vals, sub_lab)
 
 
 
@@ -307,6 +311,8 @@ def ccm_diff_dict(df_1, df_2):
     """
     This function calculates differences in CCM statistics by brain region and returns it as a dict. 
     Positive differences indicate an increase compared to baseline. 
+    NB this function removes data from both dictionaries that do not have enough cells for statisical comparison.
+
 
     Inputs:
     df_1 (dict): dictionary containing ccm dataset 1, coordinates and labels together - baseline dataset.
@@ -321,14 +327,22 @@ def ccm_diff_dict(df_1, df_2):
     import pandas as pd
 
     lab = np.intersect1d(np.unique(np.array(df_1['label'])),np.unique(np.array(df_2['label']))) #Find shared labels
-    diff_v = np.zeros((len(lab))) #initialise vector of differences for each region
+    diff_v = [] #initialise vector of differences for each region
+    sub_lab = [] #new list which will have only labels with enough comparisons
 
     for x,l in enumerate(lab): #loop through each label
         data_1 = np.array(df_1['data'][df_1['label'] == l]) #grab data from dict 1 for given region - this should be your baseline
         data_2 = np.array(df_2['data'][df_2['label'] == l]) #grab data from dict 2 for given region - this should be alt. condition
-        diff_v[x] = np.mean(data_2) - np.mean(data_1) #positive values mean an increase from baseline
 
-    d = {'data': diff_v, 'label': lab, 'num': np.arange(0, len(lab), 1)}
+        if len(data_1) < 8 or len(data_2) < 8:
+            continue # dont add in data without enough cells for comparison
+            
+        else:
+            diff_v = np.append(diff_v,np.mean(data_2) - np.mean(data_1)) #positive values mean an increase from baseline
+            sub_lab = np.append(sub_lab, l)
+        
+        
+    d = {'data': diff_v, 'label': sub_lab, 'num': np.arange(0, len(sub_lab), 1)}
     df = pd.DataFrame(data=d)
     
     return(df)
