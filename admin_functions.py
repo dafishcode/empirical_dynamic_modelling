@@ -617,10 +617,19 @@ def stats_2samp(data1, data2, alpha, n_comp, mode):
         else:
             print('Samples are significantly different')
     
-    p1, p2 = stats.normaltest(data1)[1], stats.normaltest(data2)[1]
     corrected_alpha = alpha/n_comp
+    if len(data1) >7 and len(data2) > 7:
+        p1, p2 = stats.normaltest(data1)[1], stats.normaltest(data2)[1]
+        if p1 or p2 < alpha:
+            normal = 'no'
+        else:
+            normal = 'yes'
     
-    if p1 or p2 < alpha:
+    else: #if you have less than 8 samples, use non-parametric test
+        normal = 'no'
+        
+    
+    if normal == 'no':
         print('At least one sample is non-Gaussian - performing non-parametric test')
         
         if mode == 'ind':
@@ -636,7 +645,7 @@ def stats_2samp(data1, data2, alpha, n_comp, mode):
             return(w,p)
         
             
-    else:
+    elif normal == 'yes':
         print('Both samples are Gaussian - performing parametric test')
     
         if mode == 'ind':
