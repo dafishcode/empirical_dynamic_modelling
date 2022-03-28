@@ -119,6 +119,7 @@ def ccm_stats(file, mode):
     Inputs:
         file (str): filename - should be a '-CCMxmap.h5' file
         mode (str): what data type you want:
+                        'ccm' = matrix of ccm values - rows = effects of a timeseries, columns = causes of a timeseries (ie. cell xy = to what extent does x cause y; cell yx = to what extent does y cause x).  
                         'c_to_sz' = cells that drive the seizure
                         'sz_to_c' = cells that are driven by the seizure
                         'e' = embedding dimension of each cell
@@ -126,7 +127,7 @@ def ccm_stats(file, mode):
                         'rd_int' =  #non-linear integration - mean rhodiff of neurons that cause neuron of interest
                         
     Returns:
-            (np array): 1d vector of interest (length = n cells) containing ccm stats
+            (np array): np array of interest (length = n cells) containing ccm stats
     
     
     """      
@@ -135,9 +136,14 @@ def ccm_stats(file, mode):
     import numpy as np
     data = h5py.File(file)
     
-    if mode != 'c_to_sz' and mode != 'sz_to_c' and mode != 'e' and mode != 'rd_cause' and mode != 'rd_int':
+    if mode != 'c_to_sz' and mode != 'sz_to_c' and mode != 'e' and mode != 'rd_cause' and mode != 'rd_int' and mode != 'ccm':
         print('Mode name does not match options')
         return()
+    
+    if mode == 'ccm':
+        ccm = np.array(data['ccm']) 
+        ccm = ccm[1:,1:] #Remove mean trace
+        return(ccm)
     
     if mode == 'c_to_sz':
         ccm = np.array(data['ccm']) 
@@ -155,14 +161,14 @@ def ccm_stats(file, mode):
         
     else:
         rd_m = data['rhodiff'][1:,1:] #remove seizure values
-        np.fill_diagonal(rd_m,0) #remove self-ccm values 
+        np.fill_diagonal(rd_m,np.nan) #remove self-ccm values 
         
         if mode == 'rd_cause':
-            rd_cause = np.apply_along_axis(np.mean,1,rd_m) #non-linear causing - mean rhodiff of neurons that are caused by neuron of interest
+            rd_cause = np.apply_along_axis(np.nanmean,1,rd_m) #non-linear causing - mean rhodiff of neurons that are caused by neuron of interest
             return(rd_cause)
             
         if mode == 'rd_int':
-            rd_int = np.apply_along_axis(np.mean,0,rd_m) #non-linear integration - mean rhodiff of neurons that cause neuron of interest
+            rd_int = np.apply_along_axis(np.nanmean,0,rd_m) #non-linear integration - mean rhodiff of neurons that cause neuron of interest
             return(rd_int)
     
 
@@ -418,11 +424,6 @@ def ccm_fdr(df_1, df_2, alpha, mode):
     for x,l in enumerate(lab): #loop through each label
         data_1 = np.array(df_1['data'][df_1['label'] == l]) #grab data from dict 1 for given region - this should be your baseline
         data_2 = np.array(df_2['data'][df_2['label'] == l]) #grab data from dict 2 for given region - this should be alt. condition
-            
-        if mode == 'rel':
-            n_fish = len(np.unique(np.array(df_1['fish num'])).astype(float).astype(int))
-            if len(data_1) != n_fish or len(data_2) != n_fish:  #there cannot be any missing regions if samples are dependent - so skip if so
-                continue
             
         if len(data_1) < 4 or len(data_2) < 4:
             continue # dont add in data without enough cells for comparison

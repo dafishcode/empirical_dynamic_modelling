@@ -186,18 +186,18 @@ def ccm_cellstack(data_l, coord_l, mode):
     
     Returns:
         data_comb (np array): a vector of CCM stats combined together across all fish
-        coord_comb (np array): a matrix of xyz cell coordinates and labels, combined together across all fish
+        coord_comb (np array): a matrix of xyz cell coordinates, labels and fish number, combined together across all fish
         
     """      
     
     import numpy as np
 
 
-    data_comb, coord_comb = ccm_stats(data_l[0], mode),np.load(coord_l[0], allow_pickle=True).item()['coord']
+    data_comb, coord_comb = ccm_stats(data_l[0], mode),np.column_stack((np.load(coord_l[0], allow_pickle=True).item()['coord'], np.full(np.load(coord_l[0], allow_pickle=True).item()['coord'].shape[0], 0)))
 
     for i in range(1,len(data_l)):
         data = ccm_stats(data_l[i], mode)
-        coord = np.load(coord_l[i], allow_pickle=True).item()['coord']
+        coord = np.column_stack((np.load(coord_l[i], allow_pickle=True).item()['coord'],np.full(np.load(coord_l[i], allow_pickle=True).item()['coord'].shape[0], i)))
 
         if data.shape[0] != coord.shape[0]:
             print('Data shape does not match at' + str(data_l[i]) + ' and ' + str(coord_l[i]) )
@@ -223,7 +223,7 @@ def ccm_region(data, coord, mode):
             'gran' = subregional brain distinctions
     
     Returns:
-        df (dict): dictionary containing ccm data, coordinates and labels together.
+        df (dict): dictionary containing ccm data, coordinates, labels and fish number together.
         lab (np array): a vector of labels whose order corresponds to the numbers in the dictionary
         
     """      
@@ -254,54 +254,52 @@ def ccm_region(data, coord, mode):
     for i in range(lab.shape[0]): num_v[curr_coord == lab[i]] = i #loop through each label and number by lab vector
     num_v = num_v.astype(int)
 
-    df = pd.DataFrame(np.column_stack((data.astype(np.object), np.column_stack((lab_coord, num_v.astype(np.object))))), columns = ['data', 'x', 'y', 'z', 'label', 'num'])
+    df = pd.DataFrame(np.column_stack((data.astype(np.object), np.column_stack((lab_coord, np.column_stack((num_v.astype(np.object), coord[:,-1].astype(int))))))), columns = ['data', 'x', 'y', 'z', 'label', 'num', 'fish num'])
     return(df, lab)
 
+#=================================
+def ccm_region_mean(df):
+#=================================
 
-#=======================================================================================
-def ccm_fdr(df_1, df_2, alpha, mode):
-#=======================================================================================
     """
-    This function performs false discovery rate calculation to return significantly different comparisons.
-    NB this function removes data from both dictionaries that do not have enough cells for statisical comparison.
+    This function takes a dictionary of pooled neurons across different fish and returns a dictionary with ccm statistics
+    averaged over each brain region.
+    
     
     Inputs:
-    df_1 (dict): dictionary containing ccm dataset 1, coordinates and labels together.
-    df_2 (dict): dictionary containing ccm dataset 2, coordinates and labels together.
-    alpha (float): significance level
-    mode (str): 'indep' for independent samples, 'negcorr' for related samples
+        df (dict): dictionary containing ccm data, coordinates, labels and fish number together.
 
-    Outputs:
-    sig_v (np array): boolean vector - true = significant difference
-    adj_p_vals (np array): vector of adjusted p values - anything less than alpha will be significant
-    lab (np array): a vector of labels whose order corresponds to the sig_v vector
-
-    """
+    
+    Returns:
+        mean_df (dict): dictionary containing ccm data averaged over each fish brain region, with corresponding 
+        labels and fish number.
+        lab (np array): a vector of labels whose order corresponds to the numbers in the dictionary
+        
+    """      
 
     import numpy as np
     import pandas as pd
-    import mne
+    
+    mean_data, mean_lab, mean_fn = [],[],[]
+    for n in np.unique(np.array(df['fish num'])): #Loop through each fish
+        curr_df = df[df['fish num'] == n] #make sub dic for current fish
+        lab = np.unique(np.array(curr_df['label'])) #find all unique labels for current fish
+        for l in lab: #Loop through each label in current fish
+            mean_fn = np.append(mean_fn, n) #keep track of fish number
+            mean_lab = np.append(mean_lab, l) #label for each mean data
+            mean_data = np.append(mean_data,np.mean(np.array(curr_df['data'][curr_df['label'] == l]))) #take mean over ccm stats value for that region
 
-    lab = np.intersect1d(np.unique(np.array(df_1['label'])),np.unique(np.array(df_2['label']))) #Find shared labels
-    p_vals = [] #add in p values from comparisons with enough data points
-    sub_lab = [] #new list which will have only labels with enough comparisons
+    num_v = np.zeros(mean_data.shape[0]) #empty vector to fill in with number labels
 
-
-    for x,l in enumerate(lab): #loop through each label
-        data_1 = np.array(df_1['data'][df_1['label'] == l]) #grab data from dict 1 for given region - this should be your baseline
-        data_2 = np.array(df_2['data'][df_2['label'] == l]) #grab data from dict 2 for given region - this should be alt. condition
-        if len(data_1) < 8 or len(data_2) < 8:
-            continue # dont add in data without enough cells for comparison
-            
-        else:
-            p_vals = np.append(p_vals,adfn.stats_2samp(data_1, data_2, 0.05, 1, 'ind' )[1]) #Calculate p value
-            sub_lab = np.append(sub_lab, l) 
-
-    sig_v, adj_p_vals = mne.stats.fdr_correction(p_vals, 0.05, mode) #Use Benjamini hochberg FDR test 
-
-    return(sig_v, adj_p_vals, sub_lab)
+    lab = np.unique(mean_lab) #unique labels over all fish ordered
+    for i in range(mean_lab.shape[0]): num_v[i] = np.where(lab == mean_lab[i])[0][0] #loop through each label and number by lab vector
+    num_v = num_v.astype(int) 
 
 
+    mean_df = pd.DataFrame(np.column_stack((mean_data.astype(object),np.column_stack((mean_lab,np.column_stack((num_v, mean_fn)))))), 
+                      columns = ['data','label', 'num', 'fish num'])
+    
+    return(mean_df, lab)
 
 
 #=================================
@@ -334,7 +332,7 @@ def ccm_diff_dict(df_1, df_2):
         data_1 = np.array(df_1['data'][df_1['label'] == l]) #grab data from dict 1 for given region - this should be your baseline
         data_2 = np.array(df_2['data'][df_2['label'] == l]) #grab data from dict 2 for given region - this should be alt. condition
 
-        if len(data_1) < 8 or len(data_2) < 8:
+        if len(data_1) < 4 or len(data_2) < 4:
             continue # dont add in data without enough cells for comparison
             
         else:
@@ -379,6 +377,93 @@ def kspace_meantrace(coord, trace, k):
     return(k_coord, k_trace)
     
 
+
+
+
+
+
+#==============================================
+#STATS
+#==============================================
+
+#=======================================================================================
+def ccm_fdr(df_1, df_2, alpha, mode):
+#=======================================================================================
+    """
+    This function performs false discovery rate calculation to return significantly different comparisons.
+    NB this function removes data from both dictionaries that do not have enough cells for statisical comparison.
+    
+    Inputs:
+    df_1 (dict): dictionary containing ccm dataset 1, coordinates and labels together.
+    df_2 (dict): dictionary containing ccm dataset 2, coordinates and labels together.
+    alpha (float): significance level
+    mode (str): pairwise comparison mode:'ind' for independent samples, 'rel' for related samples
+
+    Outputs:
+    sig_v (np array): boolean vector - true = significant difference
+    adj_p_vals (np array): vector of adjusted p values - anything less than alpha will be significant
+    lab (np array): a vector of labels whose order corresponds to the sig_v vector
+
+    """
+
+    import numpy as np
+    import pandas as pd
+    import mne
+
+    lab = np.intersect1d(np.unique(np.array(df_1['label'])),np.unique(np.array(df_2['label']))) #Find shared labels
+    p_vals = [] #add in p values from comparisons with enough data points
+    sub_lab = [] #new list which will have only labels with enough comparisons
+
+
+    for x,l in enumerate(lab): #loop through each label
+        data_1 = np.array(df_1['data'][df_1['label'] == l]) #grab data from dict 1 for given region - this should be your baseline
+        data_2 = np.array(df_2['data'][df_2['label'] == l]) #grab data from dict 2 for given region - this should be alt. condition
+            
+        if len(data_1) < 4 or len(data_2) < 4:
+            continue # dont add in data without enough cells for comparison
+        
+        else: 
+            p_vals = np.append(p_vals,adfn.stats_2samp(data_1, data_2, 0.05, 1, mode )[1]) #Calculate p value
+            sub_lab = np.append(sub_lab, l) 
+
+    sig_v, adj_p_vals = mne.stats.fdr_correction(p_vals, 0.05, 'indep') #Use Benjamini hochberg FDR test 
+
+    return(sig_v, adj_p_vals, sub_lab)
+
+#==============================================
+#PLOT
+#==============================================
+
+#=================================
+def ccm_cellplot(dic, thresh, region, alp):
+#=================================
+
+    """
+    This function plots all neurons by their ccm statistics, above a defined threshold. 
+    
+    
+    Inputs:
+        dic (dict): dictionary containing ccm data, coordinates, labels and fish number together.
+        thresh (float): threshold for statistics
+        region (string): region to highlight during plotting - leave empty string if none
+        alp (float): alpha for highlighted region
+        
+    """      
+    from matplotlib import pyplot as plt
+
+    fig,axarr = plt.subplots(figsize = (20,10))
+    col = dic['data'] > thresh
+    plt.scatter(dic['y'], dic['x'],  s = 10, c = 'grey', alpha = 0.2) #plot all neurons
+    pos = plt.scatter(dic['y'][col], dic['x'][col],  s = 10, c = dic['data'][col], cmap='autumn_r') #plot ccm stats for those above threshold
+    
+    if len(region) > 0: #if region string contains a name
+        reg = dic['label'] == region
+        plt.scatter(dic['y'][reg], dic['x'][reg],  s = 10, c = 'green', alpha = alp) #highlight region of interest
+
+    fig.colorbar(pos, ax = axarr)
+
+    plt.show()
+    
 #===========================
 def E_ccm_heatmap(E, ccm, n_bins):
 #===========================
@@ -404,8 +489,6 @@ def E_ccm_heatmap(E, ccm, n_bins):
         hist[count] = np.histogram(np.ravel(ccm[np.where(E == i)]), bins = np.linspace(0, 1, n_bins+1))[0]
         count+=1
     return(hist)
-
-
 
 
 #==============================================
