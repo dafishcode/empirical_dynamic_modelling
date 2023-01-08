@@ -91,6 +91,7 @@ def CCM_trace_save(data, name):
     
     """
     import numpy as np
+    import os
     import h5py
 
     #rename for kEDM processing
