@@ -91,6 +91,7 @@ def CCM_trace_save(data, name):
     
     """
     import numpy as np
+    import os
     import h5py
 
     #rename for kEDM processing
@@ -119,6 +120,7 @@ def ccm_stats(file, mode):
     Inputs:
         file (str): filename - should be a '-CCMxmap.h5' file
         mode (str): what data type you want:
+                        'ccm' = matrix of ccm values - rows = effects of a timeseries, columns = causes of a timeseries (ie. cell xy = to what extent does x cause y; cell yx = to what extent does y cause x).  
                         'c_to_sz' = cells that drive the seizure
                         'sz_to_c' = cells that are driven by the seizure
                         'e' = embedding dimension of each cell
@@ -126,7 +128,7 @@ def ccm_stats(file, mode):
                         'rd_int' =  #non-linear integration - mean rhodiff of neurons that cause neuron of interest
                         
     Returns:
-            (np array): 1d vector of interest (length = n cells) containing ccm stats
+            (np array): np array of interest (length = n cells) containing ccm stats
     
     
     """      
@@ -135,9 +137,14 @@ def ccm_stats(file, mode):
     import numpy as np
     data = h5py.File(file)
     
-    if mode != 'c_to_sz' and mode != 'sz_to_c' and mode != 'e' and mode != 'rd_cause' and mode != 'rd_int':
+    if mode != 'c_to_sz' and mode != 'sz_to_c' and mode != 'e' and mode != 'rd_cause' and mode != 'rd_int' and mode != 'ccm':
         print('Mode name does not match options')
         return()
+    
+    if mode == 'ccm':
+        ccm = np.array(data['ccm']) 
+        ccm = ccm[1:,1:] #Remove mean trace
+        return(ccm)
     
     if mode == 'c_to_sz':
         ccm = np.array(data['ccm']) 
@@ -155,14 +162,14 @@ def ccm_stats(file, mode):
         
     else:
         rd_m = data['rhodiff'][1:,1:] #remove seizure values
-        np.fill_diagonal(rd_m,0) #remove self-ccm values 
+        np.fill_diagonal(rd_m,np.nan) #remove self-ccm values 
         
         if mode == 'rd_cause':
-            rd_cause = np.apply_along_axis(np.mean,1,rd_m) #non-linear causing - mean rhodiff of neurons that are caused by neuron of interest
+            rd_cause = np.apply_along_axis(np.nanmean,1,rd_m) #non-linear causing - mean rhodiff of neurons that are caused by neuron of interest
             return(rd_cause)
             
         if mode == 'rd_int':
-            rd_int = np.apply_along_axis(np.mean,0,rd_m) #non-linear integration - mean rhodiff of neurons that cause neuron of interest
+            rd_int = np.apply_along_axis(np.nanmean,0,rd_m) #non-linear integration - mean rhodiff of neurons that cause neuron of interest
             return(rd_int)
     
 

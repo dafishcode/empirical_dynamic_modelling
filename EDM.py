@@ -66,17 +66,16 @@ def LE_embed(data, tau):
     This calculates the lyapunov exponent on an embedded dataset. 
     
     Inputs:
-        data (np array): 1d vector timeseries
+        data (np array): embedded timmeseries
         tau (int): time lag
-        m (int): embedding dimension
-        thresh (int): false nn threshold
+
     
     Returns:
-        n_false_NN (int): number of false nns
+        LE (float): lyapunov exponent
     
     """
 
-
+    import numpy as np
     from sklearn.neighbors import NearestNeighbors 
 
     le = np.zeros((data.shape[0]-1))
@@ -94,22 +93,29 @@ def LE_embed(data, tau):
         #Loop through each neighbour to i
         for e in range(indices.shape[0]):
             dj0 = np.linalg.norm(data[indices[e][0]] - data[indices[e][1]]) #Distance at time 0
-            sep = indices[e][1] - indices[e][0] #Time separation at t0
+            
+            if dj0 > 0: #if distance is 0 at start ignore
+                sep = indices[e][1] - indices[e][0] #Time separation at t0
 
-            #Avoid time points that go past end 
-            if e+i < indices.shape[0]:
-                d1i_ind = indices[e+i][0]
-                d2i_ind = d1i_ind+sep
-                if d2i_ind< data.shape[0]:
-                    dji = np.linalg.norm(data[d1i_ind] - data[d2i_ind]) #Distance at time i
-                    sum_ += np.log(np.abs(dji/dj0))
-                    sum_count +=1
+                #Avoid time points that go past end 
+                if e+i < indices.shape[0]:
+                    d1i_ind = indices[e+i][0]
+                    d2i_ind = d1i_ind+sep
+                    if d2i_ind< data.shape[0]:
+                        dji = np.linalg.norm(data[d1i_ind] - data[d2i_ind]) #Distance at time i
+
+                        if np.abs(dji/dj0) == 0: #if distance at end is 0 add 0
+                            sum_ += 0
+                        else:
+                            sum_ += np.log(np.abs(dji/dj0))
+                        sum_count +=1
              
         if sum_count == 0:
             break
         le[i-1] = (1/ i) *(sum_/sum_count)
                     
     return(le)
+
 
 
 
@@ -412,7 +418,7 @@ def find_E(data, tau, mode):
         for i in range(1,15):
             nFNN.append(FNN(data,tau,i, 10) / len(data))
 
-        E = np.min(np.where(np.array(nFNN) ==0 )) + 1
+        E = np.min(np.where(np.array(nFNN) < 0.003 )) + 1
         return(E)
     
     if mode == 'simplex':
